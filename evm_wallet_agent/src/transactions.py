@@ -13,9 +13,11 @@ from web3 import Web3
 
 from . import storage
 from .fee_manager import FeeManager
+from .logger import get_wallet_logger
 from .utils import (
     ERC20_ABI,
     TransactionError,
+    TransactionResult,
     get_web3,
     is_valid_address,
     load_tokens_config,
@@ -124,7 +126,14 @@ def _finalize_and_send(
     gas_limit: Optional[int],
     wallet_folder: Optional[str],
     metadata: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
+) -> TransactionResult:
+    """Build, sign, and broadcast ``tx`` and return a :class:`TransactionResult`.
+
+    Pre-broadcast errors (fee estimation, signing, etc.) raise
+    :class:`TransactionError`. Broadcast / RPC errors are *captured* and
+    returned as ``TransactionResult(success=False, error=...)`` so that
+    callers — particularly LLM agents — always get a consistent shape.
+    """
     fee_params = fee_manager.build_fee_params(
         tx, tx_type=tx_type, speed=speed, gas_price=gas_price, gas_limit=gas_limit
     )
@@ -136,40 +145,82 @@ def _finalize_and_send(
     )
     if raw_tx is None:
         raise TransactionError("Signed transaction has no raw payload")
+
+    base_kwargs: Dict[str, Any] = {
+        "network": network,
+        "tx_type": tx_type,
+        "from_address": wallet.address,
+        "to_address": tx["to"],
+        "value": int(tx.get("value", 0)),
+        "nonce": int(tx["nonce"]),
+        "gas_limit": int(tx["gas"]),
+        "chain_id": int(tx["chainId"]),
+        "speed": speed,
+        "metadata": dict(metadata or {}),
+    }
+    if "gasPrice" in tx:
+        base_kwargs["gas_price"] = int(tx["gasPrice"])
+    if "maxFeePerGas" in tx:
+        base_kwargs["max_fee_per_gas"] = int(tx["maxFeePerGas"])
+        base_kwargs["max_priority_fee_per_gas"] = int(tx["maxPriorityFeePerGas"])
+
+    wlogger = get_wallet_logger(wallet.name, folder=wallet_folder) if wallet.name else logger
     try:
         tx_hash = w3.eth.send_raw_transaction(raw_tx)
     except Exception as exc:
         _reset_nonce(wallet.address, network)
-        raise TransactionError(f"Failed to broadcast transaction: {exc}") from exc
+        result = TransactionResult(
+            success=False,
+            error=f"Failed to broadcast transaction: {exc}",
+            status="error",
+            **base_kwargs,
+        )
+        wlogger.error(
+            "Broadcast failed: tx_type=%s network=%s error=%s",
+            tx_type,
+            network,
+            exc,
+        )
+        if wallet_folder and wallet.name:
+            try:
+                storage.save_transaction_result(
+                    wallet.name, result, folder=wallet_folder
+                )
+            except Exception as inner:  # pragma: no cover - storage failure
+                logger.warning(
+                    "Failed to record transaction for %s: %s", wallet.name, inner
+                )
+        return result
 
     tx_hash_hex = tx_hash.hex() if hasattr(tx_hash, "hex") else str(tx_hash)
-    record: Dict[str, Any] = {
-        "tx_hash": tx_hash_hex,
-        "from": wallet.address,
-        "to": tx["to"],
-        "value": tx["value"],
-        "chain_id": tx["chainId"],
-        "network": network,
-        "tx_type": tx_type,
-        "nonce": tx["nonce"],
-        "gas": tx["gas"],
-        "speed": speed,
-        "status": "pending",
-    }
-    if "gasPrice" in tx:
-        record["gas_price"] = tx["gasPrice"]
-    if "maxFeePerGas" in tx:
-        record["max_fee_per_gas"] = tx["maxFeePerGas"]
-        record["max_priority_fee_per_gas"] = tx["maxPriorityFeePerGas"]
-    if metadata:
-        record["metadata"] = metadata
+    if not tx_hash_hex.startswith("0x"):
+        tx_hash_hex = "0x" + tx_hash_hex
+
+    result = TransactionResult(
+        success=True,
+        tx_hash=tx_hash_hex,
+        status="pending",
+        **base_kwargs,
+    )
+    wlogger.info(
+        "Broadcast tx_hash=%s tx_type=%s network=%s from=%s to=%s value=%s "
+        "gas_limit=%s speed=%s",
+        tx_hash_hex,
+        tx_type,
+        network,
+        wallet.address,
+        tx["to"],
+        tx.get("value", 0),
+        tx["gas"],
+        speed,
+    )
 
     if wallet_folder and wallet.name:
         try:
-            storage.append_transaction(wallet.name, record, folder=wallet_folder)
+            storage.save_transaction_result(wallet.name, result, folder=wallet_folder)
         except Exception as exc:
             logger.warning("Failed to record transaction for %s: %s", wallet.name, exc)
-    return record
+    return result
 
 
 # ----------------------------------------------------------------------
@@ -186,7 +237,7 @@ def send_native(
     gas_limit: Optional[int] = None,
     config_dir: Optional[Path] = None,
     wallet_folder: Optional[str] = None,
-) -> Dict[str, Any]:
+) -> TransactionResult:
     """Send the network's native currency (ETH, MATIC, BNB, ...)."""
     wallet_obj = _resolve_wallet(wallet, config_dir=config_dir)
     if not is_valid_address(to_address):
@@ -223,7 +274,7 @@ def send_erc20(
     gas_limit: Optional[int] = None,
     config_dir: Optional[Path] = None,
     wallet_folder: Optional[str] = None,
-) -> Dict[str, Any]:
+) -> TransactionResult:
     """Send an ERC-20 token. ``token_address`` may be an address or a configured symbol."""
     wallet_obj = _resolve_wallet(wallet, config_dir=config_dir)
     if not is_valid_address(to_address):
@@ -274,7 +325,7 @@ def approve_token(
     gas_limit: Optional[int] = None,
     config_dir: Optional[Path] = None,
     wallet_folder: Optional[str] = None,
-) -> Dict[str, Any]:
+) -> TransactionResult:
     """Approve a spender to transfer up to ``amount`` of an ERC-20 token."""
     wallet_obj = _resolve_wallet(wallet, config_dir=config_dir)
     if not is_valid_address(spender_address):
@@ -373,7 +424,10 @@ def get_transaction_status(
 ) -> Dict[str, Any]:
     """Return the status and parsed receipt for a transaction hash."""
     w3 = get_web3(network, config_dir)
-    receipt = w3.eth.get_transaction_receipt(tx_hash)
+    try:
+        receipt = w3.eth.get_transaction_receipt(tx_hash)
+    except Exception:
+        return {"tx_hash": tx_hash, "status": "pending"}
     parsed = parse_receipt(receipt)
     if not parsed:
         return {"tx_hash": tx_hash, "status": "pending"}
@@ -396,3 +450,54 @@ def wait_for_receipt(
     parsed = parse_receipt(receipt)
     parsed["status_label"] = "success" if parsed.get("status") == 1 else "failed"
     return parsed
+
+
+def update_result_from_receipt(
+    result: TransactionResult,
+    network: str,
+    timeout: int = 180,
+    poll_latency: float = 2.0,
+    config_dir: Optional[Path] = None,
+    wallet_folder: Optional[str] = None,
+    wallet_name: Optional[str] = None,
+) -> TransactionResult:
+    """Wait for a receipt and fill ``gas_used``/``fee_paid``/``status`` on the result.
+
+    Returns the same ``TransactionResult`` mutated in place. If the result has
+    no ``tx_hash`` (broadcast failed), returns it unchanged.
+    """
+    if not result.tx_hash:
+        return result
+    parsed = wait_for_receipt(
+        result.tx_hash,
+        network,
+        timeout=timeout,
+        poll_latency=poll_latency,
+        config_dir=config_dir,
+    )
+    gas_used = parsed.get("gas_used")
+    effective_price = parsed.get("effective_gas_price")
+    receipt_status = parsed.get("status")
+    result.gas_used = int(gas_used) if gas_used is not None else result.gas_used
+    if effective_price is not None:
+        result.effective_gas_price = int(effective_price)
+    if gas_used is not None and effective_price is not None:
+        result.fee_paid = int(gas_used) * int(effective_price)
+    result.block_number = parsed.get("block_number")
+    result.receipt = parsed
+    if receipt_status == 1:
+        result.status = "success"
+        result.success = True
+    elif receipt_status == 0:
+        result.status = "failed"
+        result.success = False
+        if not result.error:
+            result.error = "Transaction reverted on-chain"
+    # Persist the updated result if we know where it lives.
+    name = wallet_name or (None)
+    if wallet_folder and name:
+        try:
+            storage.save_transaction_result(name, result, folder=wallet_folder)
+        except Exception as exc:  # pragma: no cover
+            logger.warning("Failed to update transaction record: %s", exc)
+    return result

@@ -11,6 +11,13 @@ chains (Ethereum, Polygon, BSC, and their testnets). It provides:
 - A comprehensive `FeeManager` with EIP-1559 and legacy gas pricing, speed
   presets (`slow`, `medium`, `fast`, `urgent`), gas multipliers, max-gas-price
   caps, and gas estimation with manual override.
+- A unified `TransactionResult` reporting type returned by every send / approve
+  / claim function with `success`, `tx_hash`, `error`, `gas_used`, `fee_paid`,
+  and a JSON-friendly `to_dict()`.
+- Per-wallet logging (`wallets/<name>/transactions.log`) and per-wallet
+  transaction history (`wallets/<name>/transactions.json`).
+- A full test suite (unit + offline end-to-end + opt-in live-testnet) under
+  `tests/` with `pytest.ini` and a separate `requirements-test.txt`.
 
 > Heads up: this library handles private keys. Read the
 > [Security Best Practices](#security-best-practices) section before using it
@@ -30,10 +37,25 @@ evm_wallet_agent/
 │   ├── claims.py            # Airdrop / staking / token claim helpers
 │   ├── storage.py           # Folder-based wallet storage with encryption
 │   ├── fee_manager.py       # Gas estimation and fee management
-│   └── utils.py             # Error handling, conversions, retries
+│   ├── logger.py            # Per-wallet logging
+│   └── utils.py             # Error handling, conversions, retries, TransactionResult
+├── tests/                   # Unit + offline e2e + opt-in live-e2e tests
+│   ├── conftest.py
+│   ├── test_wallet.py
+│   ├── test_storage.py
+│   ├── test_transactions.py
+│   ├── test_claims.py
+│   ├── test_fee_manager.py
+│   └── test_e2e.py
+├── test_config/             # Testnet configs (Sepolia / Mumbai / BSC testnet)
+│   ├── networks.yaml          (aliased as test_networks.yaml)
+│   ├── tokens.yaml            (aliased as test_tokens.yaml)
+│   └── fee_config.yaml
 ├── wallets/                 # Wallet storage directory (gitignored)
 ├── .env.example             # Template for PRIVATE_KEY_PASSWORD, RPC URLs
+├── pytest.ini
 ├── requirements.txt
+├── requirements-test.txt
 └── README.md
 ```
 
@@ -45,6 +67,12 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env  # edit PRIVATE_KEY_PASSWORD and RPC URLs
+```
+
+To also install test dependencies:
+
+```bash
+pip install -r requirements-test.txt
 ```
 
 Python 3.10+ is recommended.
@@ -292,6 +320,18 @@ or `data` for a fully pre-encoded call. Successful sends are recorded into
   `token` (symbol or address) is provided.
 - Module-level shortcuts: `generate_wallet`, `import_wallet`, `load_wallet`.
 
+### `src/logger.py`
+
+- `setup_logger(wallet_name, folder="wallets", level=None, console=True)` —
+  Create (or fetch) a logger that writes to `wallets/<name>/transactions.log`
+  plus stderr. Loggers are cached per-wallet so handlers don't stack.
+- `get_wallet_logger(wallet_name, folder="wallets")` — Convenience wrapper.
+- `log_transaction_result(wallet_name, result, folder="wallets")` — Log a
+  :class:`TransactionResult` at INFO/ERROR depending on `result.success`.
+- `reset_loggers()` — Clear the logger cache (used by tests).
+
+Override the log level with `EVM_WALLET_LOG_LEVEL=DEBUG` in the environment.
+
 ### `src/storage.py`
 
 - `create_wallet_folder(name, folder="wallets")` — Create a wallet directory.
@@ -350,6 +390,13 @@ custom contracts, or a pre-encoded `data` blob to bypass ABI encoding.
 
 ### `src/utils.py`
 
+- `TransactionResult` — Dataclass returned by every send / approve / claim:
+  `success`, `tx_hash`, `error`, `gas_used`, `fee_paid`, `timestamp`, plus
+  diagnostic fields (`network`, `tx_type`, `from_address`, `to_address`,
+  `nonce`, `gas_limit`, `gas_price`, `max_fee_per_gas`,
+  `max_priority_fee_per_gas`, `chain_id`, `speed`, `status`, `block_number`,
+  `receipt`, `metadata`). Supports `result["tx_hash"]` for dict-style access
+  and `result.to_dict()` for JSON serialisation.
 - `to_wei(amount, decimals)` / `from_wei(amount, decimals)`
 - `gwei_to_wei(value)` / `wei_to_gwei(value)`
 - `is_valid_address(addr)` / `to_checksum(addr)`
@@ -358,6 +405,97 @@ custom contracts, or a pre-encoded `data` blob to bypass ABI encoding.
 - `parse_receipt(receipt)` — Turn a `TxReceipt` into a JSON-friendly dict.
 - Custom exceptions: `WalletError`, `NetworkError`, `TransactionError`,
   `StorageError`, `FeeError`.
+
+## Reporting System
+
+Every transaction-producing function returns a :class:`TransactionResult`.
+Successful results have `success=True` and a populated `tx_hash`; failed
+broadcasts return `success=False` with an `error` string instead of raising
+(only pre-broadcast validation errors raise `TransactionError`).
+
+```python
+from src.transactions import send_native, update_result_from_receipt
+from src.wallet import Wallet
+
+alice = Wallet.load("alice", password=password)
+
+result = send_native(
+    wallet=alice,
+    to_address="0x...",
+    amount=0.01,
+    network="sepolia",
+    wallet_folder="wallets",  # records into wallets/alice/transactions.json
+)
+
+if result.success:
+    confirmed = update_result_from_receipt(
+        result, "sepolia", wallet_folder="wallets", wallet_name="alice",
+    )
+    print(confirmed.status)          # "success" or "failed"
+    print(confirmed.gas_used)        # actual gas
+    print(confirmed.fee_paid)        # gas_used * effective_gas_price
+else:
+    print("broadcast failed:", result.error)
+```
+
+`wallets/<name>/transactions.json` stores every result as JSON. Re-saving a
+result with the same `tx_hash` (e.g. after `update_result_from_receipt`) is an
+**in-place update** — the history file always has one row per transaction.
+
+## Logging
+
+Every wallet has a logger configured by :func:`setup_logger` (called lazily
+when sending the first transaction). Logs go to:
+
+1. `wallets/<name>/transactions.log` (file handler) — full audit trail.
+2. `stderr` (stream handler) — for ad-hoc inspection during agent runs.
+
+Each broadcast emits a single INFO line with `tx_hash`, `tx_type`, network,
+sender, recipient, value, gas limit and speed; failures emit an ERROR line
+with the underlying RPC error. The log level defaults to `INFO` and can be
+raised with `EVM_WALLET_LOG_LEVEL=DEBUG` in the environment.
+
+## Testing
+
+The suite under `tests/` is organised into:
+
+| File                       | What it covers                                              |
+|----------------------------|-------------------------------------------------------------|
+| `test_wallet.py`           | Generation, import, mnemonic, save/load, balance lookups     |
+| `test_storage.py`          | Folder creation, AES-256-GCM encryption, history persistence |
+| `test_transactions.py`     | Send / approve / fee preview / nonce / receipt updates       |
+| `test_claims.py`           | Airdrop / staking / token claims + `check_claimable`         |
+| `test_fee_manager.py`      | EIP-1559, legacy, gas multipliers, caps, validation          |
+| `test_e2e.py`              | Offline end-to-end pipelines + opt-in live-testnet tests     |
+
+All unit and offline-e2e tests run fully offline by patching `Web3` with a
+mock in `tests/conftest.py`. Run them with:
+
+```bash
+pip install -r requirements-test.txt
+pytest                            # full suite, ~100 tests in <2s
+pytest --cov=src --cov-report=term-missing  # with coverage
+```
+
+### Live-testnet tests
+
+`test_e2e.py` also defines tests marked with `@pytest.mark.live_e2e`. These
+are skipped by default. To run them, point the agent at a funded testnet
+wallet:
+
+```bash
+export EVM_WALLET_RUN_E2E=1
+export E2E_PRIVATE_KEY=0x...           # a funded testnet wallet
+export E2E_RECIPIENT=0x000000000000000000000000000000000000dEaD
+export E2E_NETWORK=sepolia             # or mumbai / bsc_testnet
+export SEPOLIA_RPC_URL=https://your-rpc...
+pytest tests/test_e2e.py -m live_e2e -v
+```
+
+The `test_config/` directory ships testnet-flavoured `networks.yaml`,
+`tokens.yaml`, and `fee_config.yaml` (the loader expects those exact names;
+the spec aliases `test_networks.yaml` / `test_tokens.yaml` are kept for
+backwards compatibility).
 
 ## Configuration
 

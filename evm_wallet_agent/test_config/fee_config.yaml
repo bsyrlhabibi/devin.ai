@@ -1,0 +1,34 @@
+fee_settings:
+  default_speed: "medium"
+  gas_multiplier: 1.1
+  max_gas_price: 100
+  priority_fee:
+    slow: 1
+    medium: 2
+    fast: 3
+    urgent: 5
+  network_specific:
+    sepolia:
+      type: "eip1559"
+      max_gas_price: 50
+    mumbai:
+      type: "eip1559"
+      max_gas_price: 500
+    bsc_testnet:
+      type: "legacy"
+      max_gas_price: 20
+    test_offline:
+      type: "eip1559"
+      max_gas_price: 100
+    test_offline_legacy:
+      type: "legacy"
+      max_gas_price: 100
+  speed_multipliers:
+    slow: 0.9
+    medium: 1.0
+    fast: 1.25
+    urgent: 1.5
+  default_gas_limits:
+    native_transfer: 21000
+    erc20_transfer: 65000
+    erc20_approve: 60000

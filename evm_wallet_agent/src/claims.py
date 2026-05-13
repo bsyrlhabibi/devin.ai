@@ -37,6 +37,7 @@ from .transactions import _finalize_and_send, _resolve_token_info, _resolve_wall
 from .utils import (
     ERC20_ABI,
     TransactionError,
+    TransactionResult,
     from_wei,
     get_web3,
     is_valid_address,
@@ -224,7 +225,7 @@ def _claim_call(
     extra_metadata: Optional[Dict[str, Any]] = None,
     config_dir: Optional[Path] = None,
     wallet_folder: Optional[str] = None,
-) -> Dict[str, Any]:
+) -> TransactionResult:
     wallet_obj = _resolve_wallet(wallet, config_dir=config_dir)
     if not is_valid_address(contract_address):
         raise TransactionError(f"Invalid contract address: {contract_address}")
@@ -292,7 +293,7 @@ def claim_airdrop(
     data: Optional[Union[str, bytes]] = None,
     config_dir: Optional[Path] = None,
     wallet_folder: Optional[str] = None,
-) -> Dict[str, Any]:
+) -> TransactionResult:
     """Claim an airdrop from ``contract_address``.
 
     By default we try ``claim()`` and ``claim(address)``. Pass an ``abi``
@@ -337,7 +338,7 @@ def claim_staking_rewards(
     data: Optional[Union[str, bytes]] = None,
     config_dir: Optional[Path] = None,
     wallet_folder: Optional[str] = None,
-) -> Dict[str, Any]:
+) -> TransactionResult:
     """Claim staking rewards from a staking contract.
 
     Defaults probe ``getReward()``, ``getReward(address)``, ``harvest()`` and
@@ -385,7 +386,7 @@ def claim_token(
     data: Optional[Union[str, bytes]] = None,
     config_dir: Optional[Path] = None,
     wallet_folder: Optional[str] = None,
-) -> Dict[str, Any]:
+) -> TransactionResult:
     """Generic claim function for token rewards.
 
     ``token_address`` identifies the ERC-20 the claim pays out in (used for

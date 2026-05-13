@@ -6,10 +6,12 @@ import logging
 import os
 import re
 import time
+from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
 from decimal import Decimal
 from functools import wraps
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional, TypeVar
+from typing import Any, Callable, Dict, List, Optional, TypeVar
 
 import yaml
 from web3 import Web3
@@ -41,6 +43,110 @@ class StorageError(WalletError):
 
 class FeeError(WalletError):
     """Raised when fee estimation or validation fails."""
+
+
+def _utcnow_isoformat() -> str:
+    """Return a UTC ISO-8601 timestamp suitable for logs and JSON storage."""
+    return datetime.now(timezone.utc).isoformat()
+
+
+@dataclass
+class TransactionResult:
+    """Unified result for all wallet-agent transaction-like operations.
+
+    Every send / approve / claim function returns one of these so callers
+    (especially LLM-driven agents) can treat the result format uniformly.
+
+    Required fields:
+        success: ``True`` when the transaction was broadcast (or, for
+            confirmed transactions, when the receipt status is ``1``).
+        tx_hash: Hex-encoded transaction hash (``None`` if broadcast failed).
+        error: Human-readable error message when ``success`` is ``False``.
+        gas_used: Actual gas consumed (only filled after a receipt is
+            available; ``None`` while pending).
+        fee_paid: Actual fee paid in wei (``gas_used * effective_gas_price``
+            when available).
+        timestamp: UTC ISO-8601 timestamp the result was created.
+
+    Additional diagnostic fields are stored under ``metadata`` and ``params``
+    so downstream code (logging, reporting, replays) has everything it needs.
+    """
+
+    success: bool
+    tx_hash: Optional[str] = None
+    error: Optional[str] = None
+    gas_used: Optional[int] = None
+    fee_paid: Optional[int] = None
+    timestamp: str = field(default_factory=_utcnow_isoformat)
+
+    # Diagnostics & reporting fields
+    network: Optional[str] = None
+    tx_type: Optional[str] = None
+    status: str = "pending"  # one of: pending, success, failed, error
+    from_address: Optional[str] = None
+    to_address: Optional[str] = None
+    value: Optional[int] = None
+    nonce: Optional[int] = None
+    gas_limit: Optional[int] = None
+    gas_price: Optional[int] = None
+    max_fee_per_gas: Optional[int] = None
+    max_priority_fee_per_gas: Optional[int] = None
+    effective_gas_price: Optional[int] = None
+    chain_id: Optional[int] = None
+    speed: Optional[str] = None
+    block_number: Optional[int] = None
+    receipt: Optional[Dict[str, Any]] = None
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+    # ------------------------------------------------------------------
+    # Mapping-style access for backwards compatibility with code/tests
+    # that index TransactionResult like a dict.
+
+    def __getitem__(self, key: str) -> Any:
+        if key == "from":
+            return self.from_address
+        if key == "to":
+            return self.to_address
+        try:
+            return getattr(self, key)
+        except AttributeError as exc:
+            raise KeyError(key) from exc
+
+    def __contains__(self, key: object) -> bool:
+        if not isinstance(key, str):
+            return False
+        if key in {"from", "to"}:
+            return True
+        return hasattr(self, key)
+
+    def get(self, key: str, default: Any = None) -> Any:
+        try:
+            return self[key]
+        except KeyError:
+            return default
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Return a plain-dict representation suitable for JSON storage."""
+        data = asdict(self)
+        # Aliases that match the older record format used by storage.
+        data["from"] = self.from_address
+        data["to"] = self.to_address
+        return data
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "TransactionResult":
+        """Rebuild a TransactionResult from a JSON-friendly dict."""
+        if not isinstance(data, dict):
+            raise TypeError("TransactionResult.from_dict expects a dict")
+        known: Dict[str, Any] = {}
+        for f in cls.__dataclass_fields__:
+            if f in data:
+                known[f] = data[f]
+        if "from_address" not in known and "from" in data:
+            known["from_address"] = data["from"]
+        if "to_address" not in known and "to" in data:
+            known["to_address"] = data["to"]
+        return cls(**known)
 
 
 def _expand_env_vars(value: Any) -> Any:

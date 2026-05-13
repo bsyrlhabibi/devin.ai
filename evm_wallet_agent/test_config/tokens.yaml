@@ -1,0 +1,38 @@
+tokens:
+  sepolia:
+    USDC:
+      address: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238"
+      decimals: 6
+      symbol: "USDC"
+    WETH:
+      address: "0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14"
+      decimals: 18
+      symbol: "WETH"
+
+  mumbai:
+    USDC:
+      address: "0x0FA8781a83E46826621b3BC094Ea2A0212e71B23"
+      decimals: 6
+      symbol: "USDC"
+
+  bsc_testnet:
+    USDT:
+      address: "0x337610d27c682E347C9cD60BD4b3b107C9d34dDd"
+      decimals: 18
+      symbol: "USDT"
+
+  test_offline:
+    USDT:
+      address: "0x1111111111111111111111111111111111111111"
+      decimals: 6
+      symbol: "USDT"
+    DAI:
+      address: "0x2222222222222222222222222222222222222222"
+      decimals: 18
+      symbol: "DAI"
+
+  test_offline_legacy:
+    BUSD:
+      address: "0x3333333333333333333333333333333333333333"
+      decimals: 18
+      symbol: "BUSD"

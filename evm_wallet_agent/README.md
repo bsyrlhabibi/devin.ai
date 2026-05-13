@@ -27,6 +27,7 @@ evm_wallet_agent/
 ├── src/
 │   ├── wallet.py            # Wallet class: generate / import / load
 │   ├── transactions.py      # Send native, send ERC-20, approve, fee preview
+│   ├── claims.py            # Airdrop / staking / token claim helpers
 │   ├── storage.py           # Folder-based wallet storage with encryption
 │   ├── fee_manager.py       # Gas estimation and fee management
 │   └── utils.py             # Error handling, conversions, retries
@@ -111,6 +112,10 @@ loop. Typical patterns:
 | Send a native transfer    | `send_native(wallet, to, amount, network, ...)`     |
 | Send an ERC-20 transfer   | `send_erc20(wallet, token, to, amount, network)`    |
 | Approve an ERC-20 spender | `approve_token(wallet, token, spender, amount, ..)` |
+| Check claimable rewards   | `check_claimable(wallet, contract, network, ...)`   |
+| Claim an airdrop          | `claim_airdrop(wallet, contract, network, ...)`     |
+| Claim staking rewards     | `claim_staking_rewards(wallet, contract, network)`  |
+| Claim a token reward      | `claim_token(wallet, token, contract, network)`     |
 | Poll a tx status          | `get_transaction_status(tx_hash, network)`          |
 | List all known wallets    | `list_wallets()`                                    |
 | Delete a wallet folder    | `delete_wallet(name)`                               |
@@ -182,6 +187,97 @@ fee_settings:
 }
 ```
 
+## Claim Functions Guide
+
+Claim contracts vary wildly: airdrops, Synthetix-style staking pools, MasterChef
+forks, vesting contracts, and so on. `src/claims.py` exposes four functions
+designed to cover the common shapes while still letting you drop down to a raw
+calldata payload when needed.
+
+### Quick examples
+
+```python
+from src.wallet import Wallet
+from src.claims import (
+    claim_airdrop, claim_staking_rewards, claim_token, check_claimable,
+)
+
+alice = Wallet.load("alice", password=password)
+
+# 1. Check claimable amount before spending gas.
+info = check_claimable(
+    wallet=alice,
+    contract_address="0xAirdropContract...",
+    network="ethereum",
+    token_address="USDC",  # optional: enables human-readable `amount`
+)
+# {'contract': '0x...', 'account': '0x...', 'function': 'claimable',
+#  'amount_wei': 12500000, 'amount': 12.5, 'claimable': True, ...}
+
+# 2. Claim an airdrop (defaults try claim() / claim(address)).
+if info["claimable"]:
+    tx = claim_airdrop(
+        wallet=alice,
+        contract_address="0xAirdropContract...",
+        network="ethereum",
+        speed="fast",
+    )
+
+# 3. Claim staking rewards from a Synthetix-style pool.
+claim_staking_rewards(
+    wallet=alice,
+    contract_address="0xStakingPool...",
+    network="polygon",
+)
+
+# 4. Claim a specific token reward (token_address used for metadata + lookups).
+claim_token(
+    wallet=alice,
+    token_address="USDC",
+    contract_address="0xClaimContract...",
+    network="ethereum",
+)
+```
+
+### Custom contracts
+
+If a contract's selector isn't in the default probe list, pass an `abi` and
+`function_name` (with optional `args`). The helpers will encode the call for
+you and route it through the same fee manager as everything else:
+
+```python
+my_abi = [
+    {"inputs": [{"name": "merkleProof", "type": "bytes32[]"}],
+     "name": "claim", "outputs": [],
+     "stateMutability": "nonpayable", "type": "function"},
+]
+
+claim_airdrop(
+    wallet=alice,
+    contract_address="0xMerkleAirdrop...",
+    network="ethereum",
+    abi=my_abi,
+    function_name="claim",
+    args=[merkle_proof],
+)
+```
+
+You can also bypass ABI encoding entirely by passing pre-computed calldata via
+the `data` argument (`"0x..."` or bytes).
+
+### How defaults are probed
+
+| Function                | Default selectors tried                                  |
+|-------------------------|----------------------------------------------------------|
+| `claim_airdrop`         | `claim()`, `claim(address)`, `claimTokens()`             |
+| `claim_staking_rewards` | `getReward()`, `getReward(address)`, `claimRewards()`, `harvest()` |
+| `claim_token`           | `claim()`, `claim(address)`, `claimToken(address)`, `claimRewards()`, `getReward()` |
+| `check_claimable`       | `claimable(address)`, `claimableAmount`, `earned`, `pendingRewards`, `balanceOf` |
+
+When defaults don't fit, supply `abi` + `function_name` (and `args` if needed),
+or `data` for a fully pre-encoded call. Successful sends are recorded into
+`wallets/<name>/transactions.json` when `wallet_folder` is supplied.
+
 ## API Reference
 
 ### `src/wallet.py`
@@ -229,6 +325,16 @@ wallets/<name>/
 
 Nonces are managed internally per `(address, network)` using a thread-safe
 counter, so sending several transactions in quick succession is safe.
+
+### `src/claims.py`
+
+- `claim_airdrop(wallet, contract_address, network, speed="medium", gas_price=None, gas_limit=None, abi=None, function_name=None, args=None, data=None, wallet_folder=None)`
+- `claim_staking_rewards(wallet, contract_address, network, speed="medium", gas_price=None, gas_limit=None, abi=None, function_name=None, args=None, data=None, wallet_folder=None)`
+- `claim_token(wallet, token_address, contract_address, network, speed="medium", gas_price=None, gas_limit=None, abi=None, function_name=None, args=None, data=None, wallet_folder=None)`
+- `check_claimable(wallet, contract_address, network, abi=None, function_name=None, args=None, token_address=None, decimals=None)`
+
+All four functions accept an `abi` + `function_name` (with optional `args`) for
+custom contracts, or a pre-encoded `data` blob to bypass ABI encoding.
 
 ### `src/fee_manager.py`
 

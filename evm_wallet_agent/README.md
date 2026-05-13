@@ -1,0 +1,297 @@
+# EVM Wallet Agent
+
+A Python toolkit for building agents that operate EVM wallets across multiple
+chains (Ethereum, Polygon, BSC, and their testnets). It provides:
+
+- A `Wallet` class for generating, importing, and loading wallets.
+- Folder-based, AES-256-GCM encrypted on-disk storage of private keys.
+- Multi-chain configuration via YAML for networks, tokens, and fee settings.
+- Stateless, agent-friendly transaction functions (`send_native`, `send_erc20`,
+  `approve_token`, `estimate_transaction_fee`, ...).
+- A comprehensive `FeeManager` with EIP-1559 and legacy gas pricing, speed
+  presets (`slow`, `medium`, `fast`, `urgent`), gas multipliers, max-gas-price
+  caps, and gas estimation with manual override.
+
+> Heads up: this library handles private keys. Read the
+> [Security Best Practices](#security-best-practices) section before using it
+> with funded mainnet wallets.
+
+## Project Structure
+
+```
+evm_wallet_agent/
+├── config/
+│   ├── networks.yaml        # RPC endpoints for Ethereum, Polygon, BSC, etc.
+│   ├── tokens.yaml          # Common token addresses per network
+│   └── fee_config.yaml      # Fee / gas configuration
+├── src/
+│   ├── wallet.py            # Wallet class: generate / import / load
+│   ├── transactions.py      # Send native, send ERC-20, approve, fee preview
+│   ├── storage.py           # Folder-based wallet storage with encryption
+│   ├── fee_manager.py       # Gas estimation and fee management
+│   └── utils.py             # Error handling, conversions, retries
+├── wallets/                 # Wallet storage directory (gitignored)
+├── .env.example             # Template for PRIVATE_KEY_PASSWORD, RPC URLs
+├── requirements.txt
+└── README.md
+```
+
+## Installation
+
+```bash
+cd evm_wallet_agent
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env  # edit PRIVATE_KEY_PASSWORD and RPC URLs
+```
+
+Python 3.10+ is recommended.
+
+## Quickstart
+
+```python
+import os
+from dotenv import load_dotenv
+from src.wallet import Wallet
+from src.storage import save_wallet, load_wallet, list_wallets
+from src.transactions import (
+    send_native, send_erc20, approve_token, estimate_transaction_fee,
+)
+
+load_dotenv()
+password = os.environ["PRIVATE_KEY_PASSWORD"]
+
+# 1) Generate and persist a new wallet.
+wallet = Wallet.generate_wallet(name="alice")
+wallet.save(password=password)
+print("New wallet:", wallet.address)
+
+# 2) Load a saved wallet later (e.g. in another agent call).
+alice = Wallet.load("alice", password=password)
+
+# 3) Check balances.
+eth_balance = alice.get_balance(network="sepolia")
+usdc_balance = alice.get_balance(network="sepolia", token="USDC")
+
+# 4) Preview the fee before sending.
+preview = estimate_transaction_fee(
+    wallet=alice,
+    to_address="0x000000000000000000000000000000000000dEaD",
+    amount=0.001,
+    network="sepolia",
+    tx_type="native",
+    speed="fast",
+)
+print(preview)
+
+# 5) Send a transaction (will broadcast to the configured RPC).
+tx = send_native(
+    wallet=alice,
+    to_address="0x000000000000000000000000000000000000dEaD",
+    amount=0.001,
+    network="sepolia",
+    speed="medium",
+    wallet_folder="wallets",  # record into wallets/alice/transactions.json
+)
+print(tx["tx_hash"])
+```
+
+## Agent Integration
+
+Every public function is **stateless** and designed to be called from an agent
+loop. Typical patterns:
+
+| Agent intent              | Function                                            |
+|---------------------------|-----------------------------------------------------|
+| Create a fresh wallet     | `Wallet.generate_wallet(...).save(...)`             |
+| Use an existing wallet    | `Wallet.load(name, password)`                       |
+| Check a balance           | `Wallet.get_balance(network, token=None)`           |
+| Preview a fee             | `estimate_transaction_fee(wallet, to, amount, ...)` |
+| Send a native transfer    | `send_native(wallet, to, amount, network, ...)`     |
+| Send an ERC-20 transfer   | `send_erc20(wallet, token, to, amount, network)`    |
+| Approve an ERC-20 spender | `approve_token(wallet, token, spender, amount, ..)` |
+| Poll a tx status          | `get_transaction_status(tx_hash, network)`          |
+| List all known wallets    | `list_wallets()`                                    |
+| Delete a wallet folder    | `delete_wallet(name)`                               |
+
+Pass `wallet_folder="wallets"` to any of the send/approve functions to have the
+resulting transaction appended to `wallets/<name>/transactions.json`.
+
+## Fee Management Guide
+
+All fee logic lives in `src/fee_manager.py` and is configured by
+`config/fee_config.yaml`. The key knobs are:
+
+```yaml
+fee_settings:
+  default_speed: "medium"
+  gas_multiplier: 1.1        # Buffer applied to estimated gas limits
+  max_gas_price: 100         # Maximum Gwei (network-level cap)
+  priority_fee:
+    slow: 1
+    medium: 2
+    fast: 3
+    urgent: 5
+  network_specific:
+    ethereum: { type: eip1559, max_gas_price: 200 }
+    polygon:  { type: eip1559, max_gas_price: 500 }
+    bsc:      { type: legacy,  max_gas_price: 20 }
+```
+
+- **Speed presets** select the priority fee (EIP-1559) or a multiplier on the
+  current gas price (legacy): `slow`, `medium`, `fast`, `urgent`.
+- **Gas multiplier** buffers the `eth_estimateGas` result so transactions don't
+  run out of gas on slightly-different state.
+- **Max gas price cap** is enforced both per-network and globally. Computed gas
+  prices above the cap are clamped; manual overrides above the cap raise a
+  `FeeError`.
+- **Manual override**: any send function accepts `gas_price` (wei) and
+  `gas_limit` to bypass auto-estimation:
+
+  ```python
+  send_native(
+      wallet=alice,
+      to_address="0x...",
+      amount=0.1,
+      network="ethereum",
+      gas_price=30_000_000_000,  # 30 Gwei
+      gas_limit=21000,
+  )
+  ```
+
+- **EIP-1559 vs legacy**: each network advertises its preferred fee mode in
+  `fee_config.yaml`. EIP-1559 builds `maxFeePerGas` + `maxPriorityFeePerGas`
+  from the latest block's `baseFeePerGas`; legacy uses `eth_gasPrice`.
+
+### Fee preview
+
+`estimate_transaction_fee` returns a dict that's easy for an LLM to read:
+
+```python
+{
+  "network": "sepolia",
+  "speed": "medium",
+  "gas_limit": 21000,
+  "effective_gas_price_wei": 30000000000,
+  "effective_gas_price_gwei": 30.0,
+  "estimated_fee_wei": 630000000000000,
+  "estimated_fee_ether": 0.00063,
+  "fee_type": "eip1559",
+  "params": { ... }
+}
+```
+
+## API Reference
+
+### `src/wallet.py`
+
+- `Wallet.generate_wallet(name=None)` — Create a fresh wallet (random key).
+- `Wallet.import_wallet(private_key, name=None)` — Build a wallet from a key.
+- `Wallet.from_mnemonic(mnemonic, ...)` — Derive from BIP-39 mnemonic.
+- `Wallet.load(name, password, folder="wallets")` — Load a saved wallet.
+- `Wallet.save(name, password, folder="wallets", overwrite=False)` — Encrypt
+  and persist to disk.
+- `Wallet.get_balance(network, token=None)` — Native balance, or ERC-20 if
+  `token` (symbol or address) is provided.
+- Module-level shortcuts: `generate_wallet`, `import_wallet`, `load_wallet`.
+
+### `src/storage.py`
+
+- `create_wallet_folder(name, folder="wallets")` — Create a wallet directory.
+- `save_wallet(wallet_data, name, password, folder="wallets")` — Encrypt and
+  save a wallet. `wallet_data` must contain `address` and `private_key`.
+- `load_wallet(name, password, folder="wallets")` — Decrypt and return wallet.
+- `list_wallets(folder="wallets")` — Enumerate saved wallets.
+- `delete_wallet(name, folder="wallets")` — Remove a wallet folder.
+- `append_transaction(name, record, folder="wallets")` and
+  `read_transactions(name, folder="wallets")` — Per-wallet tx history.
+
+Folder layout (one folder per wallet):
+
+```
+wallets/<name>/
+  private_key.enc      # AES-256-GCM, PBKDF2-HMAC-SHA256 (200k iterations)
+  address.txt          # Public address
+  config.yaml          # Metadata (created_at, label, network, ...)
+  transactions.json    # Append-only transaction history
+```
+
+### `src/transactions.py`
+
+- `send_native(wallet, to_address, amount, network, speed="medium", gas_price=None, gas_limit=None, wallet_folder=None)`
+- `send_erc20(wallet, token_address, to_address, amount, network, speed="medium", gas_price=None, gas_limit=None, wallet_folder=None)`
+- `approve_token(wallet, token_address, spender_address, amount, network, speed="medium", gas_price=None, gas_limit=None, wallet_folder=None)`
+- `estimate_transaction_fee(wallet, to_address, amount, network, tx_type="native", token=None, speed="medium")`
+- `get_transaction_status(tx_hash, network)` — Returns parsed receipt or
+  `{"status": "pending"}`.
+- `wait_for_receipt(tx_hash, network, timeout=180)` — Block until mined.
+
+Nonces are managed internally per `(address, network)` using a thread-safe
+counter, so sending several transactions in quick succession is safe.
+
+### `src/fee_manager.py`
+
+- `FeeManager(network).estimate_gas(transaction)` — Estimate + buffer gas.
+- `FeeManager(network).get_gas_price(speed="medium")` — Returns either
+  `{"type": "eip1559", "maxFeePerGas", "maxPriorityFeePerGas"}` or
+  `{"type": "legacy", "gasPrice"}`.
+- `FeeManager.calculate_fee(gas_limit, gas_price)` — Total fee in wei.
+- `FeeManager(network).validate_gas_price(gas_price, max_gas_price=None)` —
+  Raises `FeeError` if above the cap.
+- `FeeManager(network).preview_fee(transaction, tx_type, speed)` — Combined
+  preview used by `estimate_transaction_fee`.
+
+### `src/utils.py`
+
+- `to_wei(amount, decimals)` / `from_wei(amount, decimals)`
+- `gwei_to_wei(value)` / `wei_to_gwei(value)`
+- `is_valid_address(addr)` / `to_checksum(addr)`
+- `validate_network(name)` / `get_web3(name)`
+- `retry(attempts, delay, backoff)` — Decorator for resilient RPC calls.
+- `parse_receipt(receipt)` — Turn a `TxReceipt` into a JSON-friendly dict.
+- Custom exceptions: `WalletError`, `NetworkError`, `TransactionError`,
+  `StorageError`, `FeeError`.
+
+## Configuration
+
+### Networks (`config/networks.yaml`)
+
+RPC URLs use `${VAR:-default}` substitution; set the variables in your `.env`
+to override the public defaults.
+
+| Network        | Chain ID | Type   |
+|----------------|----------|--------|
+| `ethereum`     | 1        | EIP-1559 |
+| `sepolia`      | 11155111 | EIP-1559 |
+| `goerli`       | 5        | EIP-1559 |
+| `polygon`      | 137      | EIP-1559 |
+| `mumbai`       | 80001    | EIP-1559 |
+| `bsc`          | 56       | Legacy   |
+| `bsc_testnet`  | 97       | Legacy   |
+
+### Tokens (`config/tokens.yaml`)
+
+Ships with USDC, USDT, DAI, WETH, WBTC, WMATIC, BUSD, WBNB, ... addresses per
+network. Add your own under the matching network key.
+
+## Security Best Practices
+
+1. **Never commit `.env` or anything under `wallets/`.** The repo's
+   `.gitignore` keeps both out by default.
+2. **Use a strong `PRIVATE_KEY_PASSWORD`.** Keys are encrypted with AES-256-GCM
+   and PBKDF2-HMAC-SHA256 (200k iterations), but the strength of the encryption
+   is bounded by your password.
+3. **Use testnets first.** All examples in this README target Sepolia/Mumbai.
+4. **Cap your gas prices.** Set sensible `max_gas_price` values per network in
+   `fee_config.yaml` to avoid spending huge amounts on fees during volatile
+   periods. The library will refuse to send transactions above the cap.
+5. **Rotate keys if exposed.** If a `private_key.enc` file ever leaks, treat
+   the wallet as compromised — generate a new one and move funds.
+6. **Audit before mainnet use.** This code is provided as a building block;
+   review it (and the dependencies) before signing real-money transactions.
+
+## License
+
+This component is part of the `bsyrlhabibi/devin.ai` repository; see the
+top-level repository for license information.

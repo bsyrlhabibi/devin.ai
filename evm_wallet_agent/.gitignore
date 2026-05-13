@@ -1,0 +1,12 @@
+.env
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+.idea/
+.vscode/
+
+# Never commit real wallets, only the .gitkeep
+wallets/*
+!wallets/.gitkeep

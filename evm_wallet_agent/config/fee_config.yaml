@@ -1,0 +1,40 @@
+fee_settings:
+  default_speed: "medium"
+  gas_multiplier: 1.1
+  max_gas_price: 100  # Maximum Gwei
+  priority_fee:
+    slow: 1
+    medium: 2
+    fast: 3
+    urgent: 5
+  network_specific:
+    ethereum:
+      type: "eip1559"
+      max_gas_price: 200
+    sepolia:
+      type: "eip1559"
+      max_gas_price: 50
+    goerli:
+      type: "eip1559"
+      max_gas_price: 50
+    polygon:
+      type: "eip1559"
+      max_gas_price: 500
+    mumbai:
+      type: "eip1559"
+      max_gas_price: 500
+    bsc:
+      type: "legacy"
+      max_gas_price: 20
+    bsc_testnet:
+      type: "legacy"
+      max_gas_price: 20
+  speed_multipliers:
+    slow: 0.9
+    medium: 1.0
+    fast: 1.25
+    urgent: 1.5
+  default_gas_limits:
+    native_transfer: 21000
+    erc20_transfer: 65000
+    erc20_approve: 60000

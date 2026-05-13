@@ -15,6 +15,12 @@ from .transactions import (
     estimate_transaction_fee,
     get_transaction_status,
 )
+from .claims import (
+    claim_airdrop,
+    claim_staking_rewards,
+    claim_token,
+    check_claimable,
+)
 from .fee_manager import FeeManager
 from . import utils
 
@@ -31,5 +37,9 @@ __all__ = [
     "approve_token",
     "estimate_transaction_fee",
     "get_transaction_status",
+    "claim_airdrop",
+    "claim_staking_rewards",
+    "claim_token",
+    "check_claimable",
     "utils",
 ]

@@ -26,7 +26,7 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
-from .utils import StorageError
+from .utils import StorageError, TransactionResult
 
 DEFAULT_WALLETS_FOLDER = "wallets"
 _PBKDF2_ITERATIONS = 200_000
@@ -226,6 +226,7 @@ def append_transaction(
 ) -> None:
     """Append a transaction record to the wallet's transactions.json file."""
     path = _wallet_dir(wallet_name, folder)
+    path.mkdir(parents=True, exist_ok=True)
     tx_file = path / "transactions.json"
     history: List[Dict[str, Any]] = []
     if tx_file.exists():
@@ -235,7 +236,40 @@ def append_transaction(
             history = []
     tx_record.setdefault("timestamp", datetime.now(timezone.utc).isoformat())
     history.append(tx_record)
-    tx_file.write_text(json.dumps(history, indent=2), encoding="utf-8")
+    tx_file.write_text(json.dumps(history, indent=2, default=str), encoding="utf-8")
+
+
+def save_transaction_result(
+    wallet_name: str,
+    result: "TransactionResult",
+    folder: str = DEFAULT_WALLETS_FOLDER,
+) -> None:
+    """Persist a :class:`TransactionResult` into the wallet's history.
+
+    Updates the existing record in place if a row with the same ``tx_hash``
+    already exists (so receipts overwrite the original "pending" entry).
+    """
+    path = _wallet_dir(wallet_name, folder)
+    path.mkdir(parents=True, exist_ok=True)
+    tx_file = path / "transactions.json"
+    history: List[Dict[str, Any]] = []
+    if tx_file.exists():
+        try:
+            history = json.loads(tx_file.read_text(encoding="utf-8") or "[]")
+        except json.JSONDecodeError:
+            history = []
+    record = result.to_dict()
+    tx_hash = record.get("tx_hash")
+    replaced = False
+    if tx_hash:
+        for idx, existing in enumerate(history):
+            if existing.get("tx_hash") == tx_hash:
+                history[idx] = record
+                replaced = True
+                break
+    if not replaced:
+        history.append(record)
+    tx_file.write_text(json.dumps(history, indent=2, default=str), encoding="utf-8")
 
 
 def read_transactions(

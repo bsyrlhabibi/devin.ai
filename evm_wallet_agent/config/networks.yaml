@@ -1,0 +1,70 @@
+networks:
+  ethereum:
+    name: "Ethereum Mainnet"
+    chain_id: 1
+    rpc_url: "${ETHEREUM_RPC_URL:-https://eth.llamarpc.com}"
+    explorer: "https://etherscan.io"
+    native_currency:
+      name: "Ether"
+      symbol: "ETH"
+      decimals: 18
+
+  sepolia:
+    name: "Sepolia Testnet"
+    chain_id: 11155111
+    rpc_url: "${SEPOLIA_RPC_URL:-https://ethereum-sepolia.publicnode.com}"
+    explorer: "https://sepolia.etherscan.io"
+    native_currency:
+      name: "Sepolia Ether"
+      symbol: "ETH"
+      decimals: 18
+
+  goerli:
+    name: "Goerli Testnet"
+    chain_id: 5
+    rpc_url: "${GOERLI_RPC_URL:-https://ethereum-goerli.publicnode.com}"
+    explorer: "https://goerli.etherscan.io"
+    native_currency:
+      name: "Goerli Ether"
+      symbol: "ETH"
+      decimals: 18
+
+  polygon:
+    name: "Polygon Mainnet"
+    chain_id: 137
+    rpc_url: "${POLYGON_RPC_URL:-https://polygon-rpc.com}"
+    explorer: "https://polygonscan.com"
+    native_currency:
+      name: "Polygon"
+      symbol: "MATIC"
+      decimals: 18
+
+  mumbai:
+    name: "Polygon Mumbai Testnet"
+    chain_id: 80001
+    rpc_url: "${MUMBAI_RPC_URL:-https://rpc-mumbai.maticvigil.com}"
+    explorer: "https://mumbai.polygonscan.com"
+    native_currency:
+      name: "Polygon"
+      symbol: "MATIC"
+      decimals: 18
+
+  bsc:
+    name: "BNB Smart Chain Mainnet"
+    chain_id: 56
+    rpc_url: "${BSC_RPC_URL:-https://bsc-dataseed.binance.org}"
+    explorer: "https://bscscan.com"
+    native_currency:
+      name: "BNB"
+      symbol: "BNB"
+      decimals: 18
+
+  bsc_testnet:
+    name: "BNB Smart Chain Testnet"
+    chain_id: 97
+    rpc_url: "${BSC_TESTNET_RPC_URL:-https://data-seed-prebsc-1-s1.binance.org:8545}"
+    explorer: "https://testnet.bscscan.com"
+    native_currency:
+      name: "tBNB"
+      symbol: "tBNB"
+      decimals: 18

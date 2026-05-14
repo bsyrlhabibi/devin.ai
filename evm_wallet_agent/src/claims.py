@@ -225,12 +225,13 @@ def _claim_call(
     extra_metadata: Optional[Dict[str, Any]] = None,
     config_dir: Optional[Path] = None,
     wallet_folder: Optional[str] = None,
+    use_alchemy: bool = True,
 ) -> TransactionResult:
     wallet_obj = _resolve_wallet(wallet, config_dir=config_dir)
     if not is_valid_address(contract_address):
         raise TransactionError(f"Invalid contract address: {contract_address}")
     network_cfg = validate_network(network, config_dir)
-    w3 = get_web3(network, config_dir)
+    w3 = get_web3(network, config_dir, use_alchemy=use_alchemy)
 
     fn_name, calldata = _encode_claim_call(
         w3=w3,
@@ -260,7 +261,9 @@ def _claim_call(
     if extra_metadata:
         metadata.update(extra_metadata)
 
-    fee_manager = FeeManager(network, config_dir=config_dir, web3=w3)
+    fee_manager = FeeManager(
+        network, config_dir=config_dir, web3=w3, use_alchemy=use_alchemy
+    )
     return _finalize_and_send(
         wallet_obj,
         w3,
@@ -293,12 +296,14 @@ def claim_airdrop(
     data: Optional[Union[str, bytes]] = None,
     config_dir: Optional[Path] = None,
     wallet_folder: Optional[str] = None,
+    use_alchemy: bool = True,
 ) -> TransactionResult:
     """Claim an airdrop from ``contract_address``.
 
     By default we try ``claim()`` and ``claim(address)``. Pass an ``abi``
     and ``function_name`` (with optional ``args``) for custom contracts,
-    or supply pre-encoded ``data`` to bypass ABI encoding entirely.
+    or supply pre-encoded ``data`` to bypass ABI encoding entirely. Pass
+    ``use_alchemy=False`` to force the public RPC.
     """
     wallet_obj = _resolve_wallet(wallet, config_dir=config_dir)
     defaults: Sequence[tuple[str, Sequence[Any]]] = (
@@ -322,6 +327,7 @@ def claim_airdrop(
         data=data,
         config_dir=config_dir,
         wallet_folder=wallet_folder,
+        use_alchemy=use_alchemy,
     )
 
 
@@ -338,12 +344,14 @@ def claim_staking_rewards(
     data: Optional[Union[str, bytes]] = None,
     config_dir: Optional[Path] = None,
     wallet_folder: Optional[str] = None,
+    use_alchemy: bool = True,
 ) -> TransactionResult:
     """Claim staking rewards from a staking contract.
 
     Defaults probe ``getReward()``, ``getReward(address)``, ``harvest()`` and
     ``claimRewards()``, which together cover the majority of staking contracts
-    in the wild (Synthetix-style, MasterChef-style, Curve gauges, etc.).
+    in the wild (Synthetix-style, MasterChef-style, Curve gauges, etc.). Pass
+    ``use_alchemy=False`` to force the public RPC.
     """
     wallet_obj = _resolve_wallet(wallet, config_dir=config_dir)
     defaults: Sequence[tuple[str, Sequence[Any]]] = (
@@ -369,6 +377,7 @@ def claim_staking_rewards(
         data=data,
         config_dir=config_dir,
         wallet_folder=wallet_folder,
+        use_alchemy=use_alchemy,
     )
 
 
@@ -386,16 +395,18 @@ def claim_token(
     data: Optional[Union[str, bytes]] = None,
     config_dir: Optional[Path] = None,
     wallet_folder: Optional[str] = None,
+    use_alchemy: bool = True,
 ) -> TransactionResult:
     """Generic claim function for token rewards.
 
     ``token_address`` identifies the ERC-20 the claim pays out in (used for
     metadata / human-readable amounts) and ``contract_address`` is the
     contract whose claim function is invoked. Defaults try ``claim()``,
-    ``claim(address)``, ``claimToken(address)``, ``claimRewards()``.
+    ``claim(address)``, ``claimToken(address)``, ``claimRewards()``. Pass
+    ``use_alchemy=False`` to force the public RPC.
     """
     wallet_obj = _resolve_wallet(wallet, config_dir=config_dir)
-    w3 = get_web3(network, config_dir)
+    w3 = get_web3(network, config_dir, use_alchemy=use_alchemy)
     resolved_token, _ = _resolve_token_info(network, token_address, w3, config_dir)
 
     defaults: Sequence[tuple[str, Sequence[Any]]] = (
@@ -427,6 +438,7 @@ def claim_token(
         },
         config_dir=config_dir,
         wallet_folder=wallet_folder,
+        use_alchemy=use_alchemy,
     )
 
 
@@ -440,6 +452,7 @@ def check_claimable(
     token_address: Optional[str] = None,
     decimals: Optional[int] = None,
     config_dir: Optional[Path] = None,
+    use_alchemy: bool = True,
 ) -> Dict[str, Any]:
     """Return how much ``wallet`` can claim from ``contract_address``.
 
@@ -453,13 +466,14 @@ def check_claimable(
     * ``claimable``: ``True`` when ``amount_wei > 0``
 
     If ``token_address`` is given (as a symbol or address) we look up the
-    decimals automatically. You can also pass ``decimals`` directly.
+    decimals automatically. You can also pass ``decimals`` directly. Pass
+    ``use_alchemy=False`` to force the public RPC for the read call.
     """
     wallet_obj = _resolve_wallet(wallet, config_dir=config_dir)
     if not is_valid_address(contract_address):
         raise TransactionError(f"Invalid contract address: {contract_address}")
     validate_network(network, config_dir)
-    w3 = get_web3(network, config_dir)
+    w3 = get_web3(network, config_dir, use_alchemy=use_alchemy)
     contract = _build_contract(w3, contract_address, abi)
 
     fn_candidates: List[tuple[str, Sequence[Any]]]

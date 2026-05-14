@@ -32,16 +32,18 @@ class FeeManager:
         network: str,
         config_dir: Optional[Path] = None,
         web3: Optional[Web3] = None,
+        use_alchemy: bool = True,
     ) -> None:
         self.network = network
         self._config_dir = config_dir
+        self.use_alchemy = use_alchemy
         self.networks = load_networks_config(config_dir)
         if network not in self.networks:
             raise NetworkError(
                 f"Unknown network '{network}'. Available: {sorted(self.networks.keys())}"
             )
         self.fee_settings = load_fee_config(config_dir)
-        self.web3 = web3 or get_web3(network, config_dir)
+        self.web3 = web3 or get_web3(network, config_dir, use_alchemy=use_alchemy)
 
     # ------------------------------------------------------------------
     # Public helpers

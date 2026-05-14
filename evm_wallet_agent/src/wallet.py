@@ -150,11 +150,15 @@ class Wallet:
         self,
         network: str,
         web3: Optional[Web3] = None,
+        use_alchemy: bool = True,
     ) -> Decimal:
-        """Return the native balance for this wallet on ``network`` in ether units."""
+        """Return the native balance for this wallet on ``network`` in ether units.
+
+        Pass ``use_alchemy=False`` to force the public RPC for this lookup.
+        """
         cfg = validate_network(network, self._config_dir)
         decimals = int(cfg.get("native_currency", {}).get("decimals", 18))
-        w3 = web3 or get_web3(network, self._config_dir)
+        w3 = web3 or get_web3(network, self._config_dir, use_alchemy=use_alchemy)
         balance_wei = w3.eth.get_balance(self.address)
         return from_wei(balance_wei, decimals=decimals)
 
@@ -163,10 +167,11 @@ class Wallet:
         network: str,
         token: str,
         web3: Optional[Web3] = None,
+        use_alchemy: bool = True,
     ) -> Decimal:
         """Return the ERC-20 balance. ``token`` may be a symbol or an address."""
         validate_network(network, self._config_dir)
-        w3 = web3 or get_web3(network, self._config_dir)
+        w3 = web3 or get_web3(network, self._config_dir, use_alchemy=use_alchemy)
         token_address, decimals = self._resolve_token(network, token, w3)
         contract = w3.eth.contract(address=token_address, abi=ERC20_ABI)
         balance = contract.functions.balanceOf(self.address).call()
@@ -177,11 +182,14 @@ class Wallet:
         network: str,
         token: Optional[str] = None,
         web3: Optional[Web3] = None,
+        use_alchemy: bool = True,
     ) -> Decimal:
         """Return native balance if ``token`` is None, otherwise the token balance."""
         if token is None:
-            return self.get_native_balance(network, web3=web3)
-        return self.get_token_balance(network, token, web3=web3)
+            return self.get_native_balance(network, web3=web3, use_alchemy=use_alchemy)
+        return self.get_token_balance(
+            network, token, web3=web3, use_alchemy=use_alchemy
+        )
 
     # ------------------------------------------------------------------
     # Helpers

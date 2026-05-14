@@ -201,15 +201,76 @@ def validate_network(network: str, config_dir: Optional[Path] = None) -> Dict[st
     return networks[network]
 
 
-def get_web3(network: str, config_dir: Optional[Path] = None) -> Web3:
-    """Return a Web3 instance connected to the given network."""
+def _alchemy_key_available() -> bool:
+    """Return True when an ``ALCHEMY_API_KEY`` env var is set and non-empty."""
+    key = os.environ.get("ALCHEMY_API_KEY", "").strip()
+    return bool(key)
+
+
+def _is_usable_url(url: Any) -> bool:
+    """A URL is usable when it's a non-empty string with no unresolved placeholders."""
+    if not isinstance(url, str):
+        return False
+    stripped = url.strip()
+    if not stripped:
+        return False
+    if "${" in stripped:
+        return False
+    return True
+
+
+def get_rpc_url(
+    network: str,
+    config_dir: Optional[Path] = None,
+    use_alchemy: bool = True,
+) -> str:
+    """Resolve the RPC URL to use for ``network``.
+
+    Selection order:
+        1. ``rpc.alchemy`` when ``use_alchemy=True`` *and* ``ALCHEMY_API_KEY``
+           is set in the environment.
+        2. ``rpc.public``.
+        3. ``rpc.public_backup``.
+        4. Legacy flat ``rpc_url`` field (kept for backward compatibility
+           with the test-config fixtures and older deployments).
+
+    Raises :class:`NetworkError` if no usable URL is configured.
+    """
     cfg = validate_network(network, config_dir)
-    rpc_url = cfg.get("rpc_url")
-    if not rpc_url:
+    candidates: List[str] = []
+
+    rpc = cfg.get("rpc")
+    if isinstance(rpc, dict):
+        alchemy_url = rpc.get("alchemy")
+        if use_alchemy and _alchemy_key_available() and _is_usable_url(alchemy_url):
+            candidates.append(str(alchemy_url))
+        for key in ("public", "public_backup"):
+            url = rpc.get(key)
+            if _is_usable_url(url):
+                candidates.append(str(url))
+
+    legacy = cfg.get("rpc_url")
+    if _is_usable_url(legacy):
+        candidates.append(str(legacy))
+
+    if not candidates:
         raise NetworkError(f"No RPC URL configured for network '{network}'")
+    return candidates[0]
+
+
+def get_web3(
+    network: str,
+    config_dir: Optional[Path] = None,
+    use_alchemy: bool = True,
+) -> Web3:
+    """Return a Web3 instance connected to the given network.
+
+    Pass ``use_alchemy=False`` to force public RPC selection even when
+    ``ALCHEMY_API_KEY`` is configured.
+    """
+    rpc_url = get_rpc_url(network, config_dir, use_alchemy=use_alchemy)
     provider = Web3.HTTPProvider(rpc_url, request_kwargs={"timeout": 30})
-    w3 = Web3(provider)
-    return w3
+    return Web3(provider)
 
 
 def to_checksum(address: str) -> str:

@@ -1,70 +1,355 @@
+# Network catalogue used by the EVM wallet agent.
+#
+# Each network entry exposes RPC endpoints under ``rpc:``:
+#   - ``alchemy``      preferred RPC, used when ``ALCHEMY_API_KEY`` is set in
+#                       the environment and the caller does not pass
+#                       ``use_alchemy=False``.
+#   - ``public``       primary public RPC.
+#   - ``public_backup``secondary public RPC, tried if ``public`` is blank or
+#                       fails to resolve.
+#
+# Public RPCs honour optional ``${<NETWORK>_RPC_URL}`` env-var overrides so
+# production callers can plug in private nodes without code changes.
+#
+# ``native_currency`` is intentionally a dict (with ``decimals``) because the
+# transactions / fee / wallet modules read ``native_currency.decimals`` when
+# converting amounts to wei.
+
 networks:
+  # ----------------------------------------------------------------------
+  # Ethereum + EVM L2s
+  # ----------------------------------------------------------------------
   ethereum:
     name: "Ethereum Mainnet"
     chain_id: 1
-    rpc_url: "${ETHEREUM_RPC_URL:-https://eth.llamarpc.com}"
     explorer: "https://etherscan.io"
     native_currency:
       name: "Ether"
       symbol: "ETH"
       decimals: 18
+    rpc:
+      alchemy: "https://eth-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY:-}"
+      public: "${ETHEREUM_RPC_URL:-https://eth.llamarpc.com}"
+      public_backup: "https://rpc.ankr.com/eth"
 
   sepolia:
     name: "Sepolia Testnet"
     chain_id: 11155111
-    rpc_url: "${SEPOLIA_RPC_URL:-https://ethereum-sepolia.publicnode.com}"
     explorer: "https://sepolia.etherscan.io"
     native_currency:
       name: "Sepolia Ether"
       symbol: "ETH"
       decimals: 18
+    rpc:
+      alchemy: "https://eth-sepolia.g.alchemy.com/v2/${ALCHEMY_API_KEY:-}"
+      public: "${SEPOLIA_RPC_URL:-https://ethereum-sepolia.publicnode.com}"
+      public_backup: "https://rpc.sepolia.org"
 
   goerli:
-    name: "Goerli Testnet"
+    name: "Goerli Testnet (deprecated)"
     chain_id: 5
-    rpc_url: "${GOERLI_RPC_URL:-https://ethereum-goerli.publicnode.com}"
     explorer: "https://goerli.etherscan.io"
     native_currency:
       name: "Goerli Ether"
       symbol: "ETH"
       decimals: 18
+    rpc:
+      alchemy: "https://eth-goerli.g.alchemy.com/v2/${ALCHEMY_API_KEY:-}"
+      public: "${GOERLI_RPC_URL:-https://ethereum-goerli.publicnode.com}"
 
+  arbitrum:
+    name: "Arbitrum One"
+    chain_id: 42161
+    explorer: "https://arbiscan.io"
+    native_currency:
+      name: "Ether"
+      symbol: "ETH"
+      decimals: 18
+    rpc:
+      alchemy: "https://arb-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY:-}"
+      public: "${ARBITRUM_RPC_URL:-https://arb1.arbitrum.io/rpc}"
+      public_backup: "https://rpc.ankr.com/arbitrum"
+
+  arbitrum_nova:
+    name: "Arbitrum Nova"
+    chain_id: 42170
+    explorer: "https://nova.arbiscan.io"
+    native_currency:
+      name: "Ether"
+      symbol: "ETH"
+      decimals: 18
+    rpc:
+      public: "${ARBITRUM_NOVA_RPC_URL:-https://nova.arbitrum.io/rpc}"
+
+  optimism:
+    name: "OP Mainnet"
+    chain_id: 10
+    explorer: "https://optimistic.etherscan.io"
+    native_currency:
+      name: "Ether"
+      symbol: "ETH"
+      decimals: 18
+    rpc:
+      alchemy: "https://opt-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY:-}"
+      public: "${OPTIMISM_RPC_URL:-https://mainnet.optimism.io}"
+      public_backup: "https://rpc.ankr.com/optimism"
+
+  base:
+    name: "Base Mainnet"
+    chain_id: 8453
+    explorer: "https://basescan.org"
+    native_currency:
+      name: "Ether"
+      symbol: "ETH"
+      decimals: 18
+    rpc:
+      alchemy: "https://base-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY:-}"
+      public: "${BASE_RPC_URL:-https://mainnet.base.org}"
+      public_backup: "https://rpc.ankr.com/base"
+
+  zksync_era:
+    name: "zkSync Era"
+    chain_id: 324
+    explorer: "https://explorer.zksync.io"
+    native_currency:
+      name: "Ether"
+      symbol: "ETH"
+      decimals: 18
+    rpc:
+      public: "${ZKSYNC_ERA_RPC_URL:-https://mainnet.era.zksync.io}"
+      public_backup: "https://rpc.ankr.com/zksync_era"
+
+  polygon_zkevm:
+    name: "Polygon zkEVM"
+    chain_id: 1101
+    explorer: "https://zkevm.polygonscan.com"
+    native_currency:
+      name: "Ether"
+      symbol: "ETH"
+      decimals: 18
+    rpc:
+      public: "${POLYGON_ZKEVM_RPC_URL:-https://zkevm-rpc.com}"
+      public_backup: "https://rpc.ankr.com/polygon_zkevm"
+
+  linea:
+    name: "Linea"
+    chain_id: 59144
+    explorer: "https://lineascan.build"
+    native_currency:
+      name: "Ether"
+      symbol: "ETH"
+      decimals: 18
+    rpc:
+      public: "${LINEA_RPC_URL:-https://rpc.linea.build}"
+      public_backup: "https://rpc.ankr.com/linea"
+
+  scroll:
+    name: "Scroll"
+    chain_id: 534352
+    explorer: "https://scrollscan.com"
+    native_currency:
+      name: "Ether"
+      symbol: "ETH"
+      decimals: 18
+    rpc:
+      public: "${SCROLL_RPC_URL:-https://rpc.scroll.io}"
+      public_backup: "https://rpc.ankr.com/scroll"
+
+  mantle:
+    name: "Mantle"
+    chain_id: 5000
+    explorer: "https://explorer.mantle.xyz"
+    native_currency:
+      name: "Mantle"
+      symbol: "MNT"
+      decimals: 18
+    rpc:
+      public: "${MANTLE_RPC_URL:-https://rpc.mantle.xyz}"
+      public_backup: "https://rpc.ankr.com/mantle"
+
+  # ----------------------------------------------------------------------
+  # Polygon
+  # ----------------------------------------------------------------------
   polygon:
     name: "Polygon Mainnet"
     chain_id: 137
-    rpc_url: "${POLYGON_RPC_URL:-https://polygon-rpc.com}"
     explorer: "https://polygonscan.com"
     native_currency:
       name: "Polygon"
       symbol: "MATIC"
       decimals: 18
+    rpc:
+      alchemy: "https://polygon-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY:-}"
+      public: "${POLYGON_RPC_URL:-https://polygon-rpc.com}"
+      public_backup: "https://rpc.ankr.com/polygon"
 
   mumbai:
     name: "Polygon Mumbai Testnet"
     chain_id: 80001
-    rpc_url: "${MUMBAI_RPC_URL:-https://rpc-mumbai.maticvigil.com}"
     explorer: "https://mumbai.polygonscan.com"
     native_currency:
       name: "Polygon"
       symbol: "MATIC"
       decimals: 18
+    rpc:
+      alchemy: "https://polygon-mumbai.g.alchemy.com/v2/${ALCHEMY_API_KEY:-}"
+      public: "${MUMBAI_RPC_URL:-https://rpc-mumbai.maticvigil.com}"
 
+  # ----------------------------------------------------------------------
+  # BNB Smart Chain
+  # ----------------------------------------------------------------------
   bsc:
-    name: "BNB Smart Chain Mainnet"
+    name: "BNB Smart Chain"
     chain_id: 56
-    rpc_url: "${BSC_RPC_URL:-https://bsc-dataseed.binance.org}"
     explorer: "https://bscscan.com"
     native_currency:
       name: "BNB"
       symbol: "BNB"
       decimals: 18
+    rpc:
+      alchemy: "https://bnb-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY:-}"
+      public: "${BSC_RPC_URL:-https://bsc-dataseed.binance.org}"
+      public_backup: "https://bsc-dataseed1.defibit.io"
 
   bsc_testnet:
     name: "BNB Smart Chain Testnet"
     chain_id: 97
-    rpc_url: "${BSC_TESTNET_RPC_URL:-https://data-seed-prebsc-1-s1.binance.org:8545}"
     explorer: "https://testnet.bscscan.com"
     native_currency:
       name: "tBNB"
       symbol: "tBNB"
       decimals: 18
+    rpc:
+      public: "${BSC_TESTNET_RPC_URL:-https://data-seed-prebsc-1-s1.binance.org:8545}"
+
+  # ----------------------------------------------------------------------
+  # Other major EVM chains
+  # ----------------------------------------------------------------------
+  avalanche:
+    name: "Avalanche C-Chain"
+    chain_id: 43114
+    explorer: "https://snowtrace.io"
+    native_currency:
+      name: "Avalanche"
+      symbol: "AVAX"
+      decimals: 18
+    rpc:
+      public: "${AVALANCHE_RPC_URL:-https://api.avax.network/ext/bc/C/rpc}"
+      public_backup: "https://rpc.ankr.com/avalanche"
+
+  fantom:
+    name: "Fantom Opera"
+    chain_id: 250
+    explorer: "https://ftmscan.com"
+    native_currency:
+      name: "Fantom"
+      symbol: "FTM"
+      decimals: 18
+    rpc:
+      public: "${FANTOM_RPC_URL:-https://rpc.ftm.tools}"
+      public_backup: "https://rpc.ankr.com/fantom"
+
+  aurora:
+    name: "Aurora"
+    chain_id: 1313161554
+    explorer: "https://explorer.aurora.dev"
+    native_currency:
+      name: "Ether"
+      symbol: "ETH"
+      decimals: 18
+    rpc:
+      public: "${AURORA_RPC_URL:-https://mainnet.aurora.dev}"
+
+  harmony:
+    name: "Harmony Mainnet Shard 0"
+    chain_id: 1666600000
+    explorer: "https://explorer.harmony.one"
+    native_currency:
+      name: "ONE"
+      symbol: "ONE"
+      decimals: 18
+    rpc:
+      public: "${HARMONY_RPC_URL:-https://api.harmony.one}"
+      public_backup: "https://rpc.ankr.com/harmony"
+
+  cronos:
+    name: "Cronos"
+    chain_id: 25
+    explorer: "https://cronoscan.com"
+    native_currency:
+      name: "Cronos"
+      symbol: "CRO"
+      decimals: 18
+    rpc:
+      public: "${CRONOS_RPC_URL:-https://evm.cronos.org}"
+      public_backup: "https://rpc.ankr.com/cronos"
+
+  moonbeam:
+    name: "Moonbeam"
+    chain_id: 1284
+    explorer: "https://moonbeam.moonscan.io"
+    native_currency:
+      name: "Glimmer"
+      symbol: "GLMR"
+      decimals: 18
+    rpc:
+      public: "${MOONBEAM_RPC_URL:-https://rpc.api.moonbeam.network}"
+      public_backup: "https://rpc.ankr.com/moonbeam"
+
+  moonriver:
+    name: "Moonriver"
+    chain_id: 1285
+    explorer: "https://moonriver.moonscan.io"
+    native_currency:
+      name: "Moonriver"
+      symbol: "MOVR"
+      decimals: 18
+    rpc:
+      public: "${MOONRIVER_RPC_URL:-https://rpc.moonriver.moonbeam.network}"
+
+  celo:
+    name: "Celo Mainnet"
+    chain_id: 42220
+    explorer: "https://celoscan.io"
+    native_currency:
+      name: "Celo"
+      symbol: "CELO"
+      decimals: 18
+    rpc:
+      public: "${CELO_RPC_URL:-https://forno.celo.org}"
+      public_backup: "https://rpc.ankr.com/celo"
+
+  gnosis:
+    name: "Gnosis Chain"
+    chain_id: 100
+    explorer: "https://gnosisscan.io"
+    native_currency:
+      name: "xDAI"
+      symbol: "xDAI"
+      decimals: 18
+    rpc:
+      public: "${GNOSIS_RPC_URL:-https://rpc.gnosischain.com}"
+      public_backup: "https://rpc.ankr.com/gnosis"
+
+  astar:
+    name: "Astar"
+    chain_id: 592
+    explorer: "https://astar.subscan.io"
+    native_currency:
+      name: "Astar"
+      symbol: "ASTR"
+      decimals: 18
+    rpc:
+      public: "${ASTAR_RPC_URL:-https://evm.astar.network}"
+      public_backup: "https://rpc.ankr.com/astar"
+
+  metis:
+    name: "Metis Andromeda"
+    chain_id: 1088
+    explorer: "https://andromeda-explorer.metis.io"
+    native_currency:
+      name: "Metis"
+      symbol: "METIS"
+      decimals: 18
+    rpc:
+      public: "${METIS_RPC_URL:-https://andromeda.metis.io/?owner=1088}"

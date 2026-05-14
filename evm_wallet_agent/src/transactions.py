@@ -237,17 +237,25 @@ def send_native(
     gas_limit: Optional[int] = None,
     config_dir: Optional[Path] = None,
     wallet_folder: Optional[str] = None,
+    use_alchemy: bool = True,
 ) -> TransactionResult:
-    """Send the network's native currency (ETH, MATIC, BNB, ...)."""
+    """Send the network's native currency (ETH, MATIC, BNB, ...).
+
+    Pass ``use_alchemy=False`` to force the public RPC for this transaction
+    (default ``True`` selects the Alchemy endpoint when ``ALCHEMY_API_KEY``
+    is configured).
+    """
     wallet_obj = _resolve_wallet(wallet, config_dir=config_dir)
     if not is_valid_address(to_address):
         raise TransactionError(f"Invalid recipient address: {to_address}")
     network_cfg = validate_network(network, config_dir)
-    w3 = get_web3(network, config_dir)
+    w3 = get_web3(network, config_dir, use_alchemy=use_alchemy)
     decimals = int(network_cfg.get("native_currency", {}).get("decimals", 18))
     value = to_wei(amount, decimals=decimals)
     tx = _build_base_tx(w3, network_cfg, wallet_obj.address, to_address, value)
-    fee_manager = FeeManager(network, config_dir=config_dir, web3=w3)
+    fee_manager = FeeManager(
+        network, config_dir=config_dir, web3=w3, use_alchemy=use_alchemy
+    )
     return _finalize_and_send(
         wallet_obj,
         w3,
@@ -274,13 +282,17 @@ def send_erc20(
     gas_limit: Optional[int] = None,
     config_dir: Optional[Path] = None,
     wallet_folder: Optional[str] = None,
+    use_alchemy: bool = True,
 ) -> TransactionResult:
-    """Send an ERC-20 token. ``token_address`` may be an address or a configured symbol."""
+    """Send an ERC-20 token. ``token_address`` may be an address or a configured symbol.
+
+    Pass ``use_alchemy=False`` to force the public RPC.
+    """
     wallet_obj = _resolve_wallet(wallet, config_dir=config_dir)
     if not is_valid_address(to_address):
         raise TransactionError(f"Invalid recipient address: {to_address}")
     network_cfg = validate_network(network, config_dir)
-    w3 = get_web3(network, config_dir)
+    w3 = get_web3(network, config_dir, use_alchemy=use_alchemy)
     contract_address, decimals = _resolve_token_info(network, token_address, w3, config_dir)
     raw_amount = to_wei(amount, decimals=decimals)
     contract = w3.eth.contract(address=contract_address, abi=ERC20_ABI)
@@ -293,7 +305,9 @@ def send_erc20(
         value=0,
         data=data,
     )
-    fee_manager = FeeManager(network, config_dir=config_dir, web3=w3)
+    fee_manager = FeeManager(
+        network, config_dir=config_dir, web3=w3, use_alchemy=use_alchemy
+    )
     return _finalize_and_send(
         wallet_obj,
         w3,
@@ -325,13 +339,17 @@ def approve_token(
     gas_limit: Optional[int] = None,
     config_dir: Optional[Path] = None,
     wallet_folder: Optional[str] = None,
+    use_alchemy: bool = True,
 ) -> TransactionResult:
-    """Approve a spender to transfer up to ``amount`` of an ERC-20 token."""
+    """Approve a spender to transfer up to ``amount`` of an ERC-20 token.
+
+    Pass ``use_alchemy=False`` to force the public RPC.
+    """
     wallet_obj = _resolve_wallet(wallet, config_dir=config_dir)
     if not is_valid_address(spender_address):
         raise TransactionError(f"Invalid spender address: {spender_address}")
     network_cfg = validate_network(network, config_dir)
-    w3 = get_web3(network, config_dir)
+    w3 = get_web3(network, config_dir, use_alchemy=use_alchemy)
     contract_address, decimals = _resolve_token_info(network, token_address, w3, config_dir)
     raw_amount = to_wei(amount, decimals=decimals)
     contract = w3.eth.contract(address=contract_address, abi=ERC20_ABI)
@@ -344,7 +362,9 @@ def approve_token(
         value=0,
         data=data,
     )
-    fee_manager = FeeManager(network, config_dir=config_dir, web3=w3)
+    fee_manager = FeeManager(
+        network, config_dir=config_dir, web3=w3, use_alchemy=use_alchemy
+    )
     return _finalize_and_send(
         wallet_obj,
         w3,
@@ -374,11 +394,16 @@ def estimate_transaction_fee(
     token: Optional[str] = None,
     speed: str = "medium",
     config_dir: Optional[Path] = None,
+    use_alchemy: bool = True,
 ) -> Dict[str, Any]:
-    """Preview the estimated fee for a transaction without sending it."""
+    """Preview the estimated fee for a transaction without sending it.
+
+    Pass ``use_alchemy=False`` to force the public RPC for the gas-price
+    lookup and gas-limit estimation.
+    """
     wallet_obj = _resolve_wallet(wallet, config_dir=config_dir)
     network_cfg = validate_network(network, config_dir)
-    w3 = get_web3(network, config_dir)
+    w3 = get_web3(network, config_dir, use_alchemy=use_alchemy)
 
     if tx_type == "native":
         decimals = int(network_cfg.get("native_currency", {}).get("decimals", 18))
@@ -412,7 +437,9 @@ def estimate_transaction_fee(
             f"Unsupported tx_type '{tx_type}'. Use 'native', 'erc20_transfer', or 'erc20_approve'."
         )
 
-    fee_manager = FeeManager(network, config_dir=config_dir, web3=w3)
+    fee_manager = FeeManager(
+        network, config_dir=config_dir, web3=w3, use_alchemy=use_alchemy
+    )
     return fee_manager.preview_fee(tx, tx_type=effective_type, speed=speed)
 
 
@@ -421,9 +448,13 @@ def get_transaction_status(
     tx_hash: str,
     network: str,
     config_dir: Optional[Path] = None,
+    use_alchemy: bool = True,
 ) -> Dict[str, Any]:
-    """Return the status and parsed receipt for a transaction hash."""
-    w3 = get_web3(network, config_dir)
+    """Return the status and parsed receipt for a transaction hash.
+
+    Pass ``use_alchemy=False`` to force the public RPC for the lookup.
+    """
+    w3 = get_web3(network, config_dir, use_alchemy=use_alchemy)
     try:
         receipt = w3.eth.get_transaction_receipt(tx_hash)
     except Exception:
@@ -441,9 +472,13 @@ def wait_for_receipt(
     timeout: int = 180,
     poll_latency: float = 2.0,
     config_dir: Optional[Path] = None,
+    use_alchemy: bool = True,
 ) -> Dict[str, Any]:
-    """Block until a transaction is mined and return its parsed receipt."""
-    w3 = get_web3(network, config_dir)
+    """Block until a transaction is mined and return its parsed receipt.
+
+    Pass ``use_alchemy=False`` to force the public RPC.
+    """
+    w3 = get_web3(network, config_dir, use_alchemy=use_alchemy)
     receipt = w3.eth.wait_for_transaction_receipt(
         tx_hash, timeout=timeout, poll_latency=poll_latency
     )
@@ -460,11 +495,13 @@ def update_result_from_receipt(
     config_dir: Optional[Path] = None,
     wallet_folder: Optional[str] = None,
     wallet_name: Optional[str] = None,
+    use_alchemy: bool = True,
 ) -> TransactionResult:
     """Wait for a receipt and fill ``gas_used``/``fee_paid``/``status`` on the result.
 
     Returns the same ``TransactionResult`` mutated in place. If the result has
-    no ``tx_hash`` (broadcast failed), returns it unchanged.
+    no ``tx_hash`` (broadcast failed), returns it unchanged. Pass
+    ``use_alchemy=False`` to force the public RPC.
     """
     if not result.tx_hash:
         return result
@@ -474,6 +511,7 @@ def update_result_from_receipt(
         timeout=timeout,
         poll_latency=poll_latency,
         config_dir=config_dir,
+        use_alchemy=use_alchemy,
     )
     gas_used = parsed.get("gas_used")
     effective_price = parsed.get("effective_gas_price")

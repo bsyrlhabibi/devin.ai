@@ -78,3 +78,155 @@ tokens:
       address: "0x337610d27c682E347C9cD60BD4b3b107C9d34dDd"
       decimals: 18
       symbol: "USDT"
+
+  arbitrum:
+    USDC:
+      address: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831"
+      decimals: 6
+      symbol: "USDC"
+    USDT:
+      address: "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9"
+      decimals: 6
+      symbol: "USDT"
+    DAI:
+      address: "0xDA10009cBd5D07dd0CeCc66161FC93D7c9000da1"
+      decimals: 18
+      symbol: "DAI"
+    WETH:
+      address: "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1"
+      decimals: 18
+      symbol: "WETH"
+
+  optimism:
+    USDC:
+      address: "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85"
+      decimals: 6
+      symbol: "USDC"
+    USDT:
+      address: "0x94b008aA00579c1307B0EF2c499aD98a8ce58e58"
+      decimals: 6
+      symbol: "USDT"
+    DAI:
+      address: "0xDA10009cBd5D07dd0CeCc66161FC93D7c9000da1"
+      decimals: 18
+      symbol: "DAI"
+    WETH:
+      address: "0x4200000000000000000000000000000000000006"
+      decimals: 18
+      symbol: "WETH"
+
+  base:
+    USDC:
+      address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+      decimals: 6
+      symbol: "USDC"
+    DAI:
+      address: "0x50c5725949A6F0c72E6C4a641F24049A917DB0Cb"
+      decimals: 18
+      symbol: "DAI"
+    WETH:
+      address: "0x4200000000000000000000000000000000000006"
+      decimals: 18
+      symbol: "WETH"
+
+  avalanche:
+    USDC:
+      address: "0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E"
+      decimals: 6
+      symbol: "USDC"
+    USDT:
+      address: "0x9702230A8Ea53601f5cD2dc00fDBc13d4dF4A8c7"
+      decimals: 6
+      symbol: "USDT"
+    DAI:
+      address: "0xd586E7F844cEa2F87f50152665BCbc2C279D8d70"
+      decimals: 18
+      symbol: "DAI"
+    WAVAX:
+      address: "0xB31f66AA3C1e785363F0875A1B74E27b85FD66c7"
+      decimals: 18
+      symbol: "WAVAX"
+
+  fantom:
+    USDC:
+      address: "0x04068DA6C83AFCFA0e13ba15A6696662335D5B75"
+      decimals: 6
+      symbol: "USDC"
+    DAI:
+      address: "0x8D11eC38a3EB5E956B052f67Da8Bdc9bef8Abf3E"
+      decimals: 18
+      symbol: "DAI"
+    WFTM:
+      address: "0x21be370D5312f44cB42ce377BC9b8a0cEF1A4C83"
+      decimals: 18
+      symbol: "WFTM"
+
+  linea:
+    USDC:
+      address: "0x176211869cA2b568f2A7D4EE941E073a821EE1ff"
+      decimals: 6
+      symbol: "USDC"
+    WETH:
+      address: "0xe5D7C2a44FfDDf6b295A15c148167daaAf5Cf34f"
+      decimals: 18
+      symbol: "WETH"
+
+  scroll:
+    USDC:
+      address: "0x06eFdBFf2a14a7c8E15944D1F4A48F9F95F663A4"
+      decimals: 6
+      symbol: "USDC"
+    WETH:
+      address: "0x5300000000000000000000000000000000000004"
+      decimals: 18
+      symbol: "WETH"
+
+  zksync_era:
+    USDC:
+      address: "0x1d17CBcF0D6D143135aE902365D2E5e2A16538D4"
+      decimals: 6
+      symbol: "USDC"
+    WETH:
+      address: "0x5AEa5775959fBC2557Cc8789bC1bf90A239D9a91"
+      decimals: 18
+      symbol: "WETH"
+
+  polygon_zkevm:
+    USDC:
+      address: "0xA8CE8aee21bC2A48a5EF670afCc9274C7bbbC035"
+      decimals: 6
+      symbol: "USDC"
+    WETH:
+      address: "0x4F9A0e7FD2Bf6067db6994CF12E4495Df938E6e9"
+      decimals: 18
+      symbol: "WETH"
+
+  gnosis:
+    USDC:
+      address: "0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83"
+      decimals: 6
+      symbol: "USDC"
+    WXDAI:
+      address: "0xe91D153E0b41518A2Ce8Dd3D7944Fa863463a97d"
+      decimals: 18
+      symbol: "WXDAI"
+
+  celo:
+    USDC:
+      address: "0xceba9300f2b948710d2653dD7B07f33A8B32118C"
+      decimals: 6
+      symbol: "USDC"
+    cUSD:
+      address: "0x765DE816845861e75A25fCA122bb6898B8B1282a"
+      decimals: 18
+      symbol: "cUSD"
+
+  moonbeam:
+    USDC:
+      address: "0x931715FEE2d06333043d11F658C8CE934aC61D0c"
+      decimals: 6
+      symbol: "USDC"
+    WGLMR:
+      address: "0xAcc15dC74880C9944775448304B263D191c6077F"
+      decimals: 18
+      symbol: "WGLMR"

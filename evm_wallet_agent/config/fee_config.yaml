@@ -8,6 +8,7 @@ fee_settings:
     fast: 3
     urgent: 5
   network_specific:
+    # Ethereum + EVM L2s
     ethereum:
       type: "eip1559"
       max_gas_price: 200
@@ -17,18 +18,82 @@ fee_settings:
     goerli:
       type: "eip1559"
       max_gas_price: 50
+    arbitrum:
+      type: "eip1559"
+      max_gas_price: 50
+    arbitrum_nova:
+      type: "eip1559"
+      max_gas_price: 50
+    optimism:
+      type: "eip1559"
+      max_gas_price: 50
+    base:
+      type: "eip1559"
+      max_gas_price: 50
+    zksync_era:
+      type: "eip1559"
+      max_gas_price: 50
+    polygon_zkevm:
+      type: "eip1559"
+      max_gas_price: 50
+    linea:
+      type: "eip1559"
+      max_gas_price: 50
+    scroll:
+      type: "eip1559"
+      max_gas_price: 50
+    mantle:
+      type: "eip1559"
+      max_gas_price: 50
+
+    # Polygon
     polygon:
       type: "eip1559"
       max_gas_price: 500
     mumbai:
       type: "eip1559"
       max_gas_price: 500
+
+    # BSC + legacy-gas-price chains
     bsc:
       type: "legacy"
       max_gas_price: 20
     bsc_testnet:
       type: "legacy"
       max_gas_price: 20
+    avalanche:
+      type: "legacy"
+      max_gas_price: 100
+    fantom:
+      type: "legacy"
+      max_gas_price: 500
+    aurora:
+      type: "legacy"
+      max_gas_price: 100
+    harmony:
+      type: "legacy"
+      max_gas_price: 200
+    cronos:
+      type: "legacy"
+      max_gas_price: 10000
+    moonbeam:
+      type: "legacy"
+      max_gas_price: 500
+    moonriver:
+      type: "legacy"
+      max_gas_price: 500
+    celo:
+      type: "eip1559"
+      max_gas_price: 100
+    gnosis:
+      type: "eip1559"
+      max_gas_price: 100
+    astar:
+      type: "legacy"
+      max_gas_price: 1000
+    metis:
+      type: "eip1559"
+      max_gas_price: 50
   speed_multipliers:
     slow: 0.9
     medium: 1.0

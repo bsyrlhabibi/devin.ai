@@ -35,6 +35,8 @@ from .utils import (
     TransactionError,
     TransactionResult,
     WalletError,
+    get_rpc_url,
+    get_web3,
 )
 from . import utils
 
@@ -56,8 +58,10 @@ __all__ = [
     "create_wallet_folder",
     "delete_wallet",
     "estimate_transaction_fee",
+    "get_rpc_url",
     "get_transaction_status",
     "get_wallet_logger",
+    "get_web3",
     "list_wallets",
     "load_wallet",
     "log_transaction_result",

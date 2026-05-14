@@ -1,11 +1,18 @@
 # EVM Wallet Agent
 
-A Python toolkit for building agents that operate EVM wallets across multiple
-chains (Ethereum, Polygon, BSC, and their testnets). It provides:
+A Python toolkit for building agents that operate EVM wallets across 25+
+chains (Ethereum, Polygon, BSC, Arbitrum, Optimism, Base, Avalanche, Fantom,
+Linea, Scroll, Mantle, zkSync Era, Polygon zkEVM, Gnosis, Celo, Moonbeam,
+Moonriver, Cronos, Aurora, Harmony, Astar, Metis, ...). It provides:
 
 - A `Wallet` class for generating, importing, and loading wallets.
 - Folder-based, AES-256-GCM encrypted on-disk storage of private keys.
 - Multi-chain configuration via YAML for networks, tokens, and fee settings.
+- **Per-chain Alchemy + Public RPC endpoints** with auto-fallback from Alchemy
+  to a public endpoint (and a public *backup* endpoint) — set
+  `ALCHEMY_API_KEY` once and the agent uses Alchemy everywhere, or leave it
+  blank and run on public RPCs only. Every send / claim / balance call also
+  accepts a `use_alchemy: bool` flag for per-operation control.
 - Stateless, agent-friendly transaction functions (`send_native`, `send_erc20`,
   `approve_token`, `estimate_transaction_fee`, ...).
 - A comprehensive `FeeManager` with EIP-1559 and legacy gas pricing, speed
@@ -66,7 +73,7 @@ cd evm_wallet_agent
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env  # edit PRIVATE_KEY_PASSWORD and RPC URLs
+cp .env.example .env  # edit PRIVATE_KEY_PASSWORD, ALCHEMY_API_KEY, RPC URLs
 ```
 
 To also install test dependencies:
@@ -501,18 +508,93 @@ backwards compatibility).
 
 ### Networks (`config/networks.yaml`)
 
-RPC URLs use `${VAR:-default}` substitution; set the variables in your `.env`
-to override the public defaults.
+Each network is configured with up to three RPC endpoints — `alchemy`,
+`public`, and `public_backup`. RPC URLs use `${VAR:-default}` substitution;
+set the variables in your `.env` (`ALCHEMY_API_KEY` plus the per-network
+overrides such as `ETHEREUM_RPC_URL`, `ARBITRUM_RPC_URL`, ...) to override
+the public defaults.
 
-| Network        | Chain ID | Type   |
-|----------------|----------|--------|
-| `ethereum`     | 1        | EIP-1559 |
-| `sepolia`      | 11155111 | EIP-1559 |
-| `goerli`       | 5        | EIP-1559 |
-| `polygon`      | 137      | EIP-1559 |
-| `mumbai`       | 80001    | EIP-1559 |
-| `bsc`          | 56       | Legacy   |
-| `bsc_testnet`  | 97       | Legacy   |
+```yaml
+networks:
+  ethereum:
+    chain_id: 1
+    native_currency:
+      name: "Ether"
+      symbol: "ETH"
+      decimals: 18
+    rpc:
+      alchemy: "https://eth-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY:-}"
+      public: "${ETHEREUM_RPC_URL:-https://eth.llamarpc.com}"
+      public_backup: "https://rpc.ankr.com/eth"
+```
+
+#### Supported networks (25+)
+
+| Network              | Chain ID    | Native | Fee model |
+|----------------------|-------------|--------|-----------|
+| `ethereum`           | 1           | ETH    | EIP-1559  |
+| `sepolia`            | 11155111    | ETH    | EIP-1559  |
+| `goerli`             | 5           | ETH    | EIP-1559  |
+| `polygon`            | 137         | MATIC  | EIP-1559  |
+| `mumbai`             | 80001       | MATIC  | EIP-1559  |
+| `bsc`                | 56          | BNB    | Legacy    |
+| `bsc_testnet`        | 97          | tBNB   | Legacy    |
+| `arbitrum`           | 42161       | ETH    | EIP-1559  |
+| `arbitrum_nova`      | 42170       | ETH    | EIP-1559  |
+| `optimism`           | 10          | ETH    | EIP-1559  |
+| `base`               | 8453        | ETH    | EIP-1559  |
+| `zksync_era`         | 324         | ETH    | EIP-1559  |
+| `polygon_zkevm`      | 1101        | ETH    | EIP-1559  |
+| `linea`              | 59144       | ETH    | EIP-1559  |
+| `scroll`             | 534352      | ETH    | EIP-1559  |
+| `mantle`             | 5000        | MNT    | EIP-1559  |
+| `avalanche`          | 43114       | AVAX   | Legacy    |
+| `fantom`             | 250         | FTM    | Legacy    |
+| `aurora`             | 1313161554  | ETH    | EIP-1559  |
+| `harmony`            | 1666600000  | ONE    | Legacy    |
+| `cronos`             | 25          | CRO    | Legacy    |
+| `moonbeam`           | 1284        | GLMR   | EIP-1559  |
+| `moonriver`          | 1285        | MOVR   | EIP-1559  |
+| `celo`               | 42220       | CELO   | Legacy    |
+| `gnosis`             | 100         | xDAI   | EIP-1559  |
+| `astar`              | 592         | ASTR   | EIP-1559  |
+| `metis`              | 1088        | METIS  | EIP-1559  |
+
+### Alchemy vs Public RPC selection
+
+When the agent needs a `Web3` instance for a network it picks the URL in this
+order:
+
+1. `rpc.alchemy` — used **only** when `ALCHEMY_API_KEY` is set in the
+   environment *and* the caller has not passed `use_alchemy=False`.
+2. `rpc.public`.
+3. `rpc.public_backup`.
+4. Legacy flat `rpc_url` (kept for older configs / the test fixtures).
+
+So in practice:
+
+```python
+# Default — uses Alchemy when ALCHEMY_API_KEY is set, otherwise public.
+balance = wallet.get_balance(network="arbitrum")
+
+# Force the public RPC for this call, even if Alchemy is configured.
+balance = wallet.get_balance(network="arbitrum", use_alchemy=False)
+
+# Same flag is honoured by every send / claim / fee / status function.
+send_native(
+    wallet=alice,
+    to_address="0x...",
+    amount=0.01,
+    network="arbitrum",
+    use_alchemy=False,         # << opt out of Alchemy for this send
+)
+```
+
+If `ALCHEMY_API_KEY` is *not* set the agent transparently falls back to the
+public endpoint, so chains that don't even have an Alchemy entry
+(`avalanche`, `fantom`, `gnosis`, `celo`, ...) work the same way out of the
+box. URLs still containing an unresolved `${...}` placeholder are skipped, so
+a missing API key never produces a broken RPC URL.
 
 ### Tokens (`config/tokens.yaml`)
 

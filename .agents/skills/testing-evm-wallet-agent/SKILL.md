@@ -18,7 +18,7 @@ Use this skill any time you're verifying changes that touch:
 - `evm_wallet_agent/src/storage.py`
 - `evm_wallet_agent/src/fee_manager.py`
 - `evm_wallet_agent/src/logger.py`
-- `evm_wallet_agent/src/utils.py` (esp. `TransactionResult`)
+- `evm_wallet_agent/src/utils.py` (esp. `TransactionResult`, `get_rpc_url`)
 - anything under `evm_wallet_agent/tests/` or `evm_wallet_agent/test_config/`
 
 ## Setup
@@ -43,14 +43,16 @@ Use this skill any time you're verifying changes that touch:
 
 ## How to run
 
-### Default: offline suite (95 tests, ~2 seconds)
+### Default: offline suite (~2 seconds)
 
 ```bash
 (cd evm_wallet_agent && python -m pytest tests/ -v)
 ```
 
-Expected outcome: `95 passed, 3 skipped` (the three skipped tests are
-`@pytest.mark.live_e2e` and require explicit opt-in).
+Expected outcome: `106 passed, 3 skipped` (the three skipped tests are
+`@pytest.mark.live_e2e` and require explicit opt-in). The baseline count
+may grow if newer PRs add tests — the important thing is that *all*
+offlined tests pass and the live-e2e ones stay skipped.
 
 ### Optional: live testnet
 
@@ -66,7 +68,10 @@ EVM_WALLET_RUN_E2E=1 \
   pytest evm_wallet_agent/tests/test_e2e.py -m live_e2e -v
 ```
 
-For ERC-20 testing, also set `E2E_TOKEN` (symbol or address).
+For ERC-20 testing, also set `E2E_TOKEN` (symbol or address). To exercise
+the Alchemy path, also set `ALCHEMY_API_KEY=...` — `get_rpc_url` will
+then prefer the chain's `rpc.alchemy` URL unless the test passes
+`use_alchemy=False`.
 
 ## Contracts the test suite is defending
 
@@ -92,6 +97,11 @@ the diff):
    `_reset_module_state` autouse fixture in `conftest.py` does this).
 5. Nonce cache (`transactions._nonce_state`) is rolled back to nothing
    on a broadcast failure so the next attempt reuses the same nonce.
+6. `get_rpc_url(network, use_alchemy=True)` picks `rpc.alchemy` only
+   when `ALCHEMY_API_KEY` is set in the env. `use_alchemy=False` forces
+   the public RPC even when the key is set. Every send/claim/balance
+   function exposes `use_alchemy: bool = True` and forwards it through
+   to `get_web3`.
 
 ## Writing targeted probes for new behavior
 
@@ -136,6 +146,46 @@ Use `mw.eth.raise_on_send = SomeError(...)` to simulate broadcast
 failures, `mw.eth.receipt = {...}` to simulate confirmed transactions,
 and `mw.eth.nonce = N` to control the starting nonce.
 
+### Probing the Alchemy / Public RPC selection
+
+To exercise the new selection logic without hitting real RPCs, point
+`get_rpc_url` at a temporary YAML config and toggle `ALCHEMY_API_KEY`
+in the env:
+
+```python
+import os
+from src.utils import get_rpc_url
+
+os.environ["ALCHEMY_API_KEY"] = "TESTKEY"
+assert get_rpc_url("ethereum").endswith("/v2/TESTKEY")
+
+del os.environ["ALCHEMY_API_KEY"]
+assert get_rpc_url("ethereum") == "https://eth.llamarpc.com"
+
+# Force-public even when a key is set:
+os.environ["ALCHEMY_API_KEY"] = "TESTKEY"
+assert get_rpc_url("ethereum", use_alchemy=False).startswith("https://eth.")
+```
+
+When wiring a spy version of `get_web3` to verify `use_alchemy` is
+forwarded, remember to patch the symbol on **every** module that
+imports it: `utils`, `fee_manager`, `wallet`, `transactions`, `claims`.
+
+### Gotchas when scripting wallet flows
+
+- `Wallet.save(...)` takes `wallet_name` as its **first positional**
+  argument, then `password`. When the wallet already has a `name` you
+  can omit `wallet_name`, but you must still pass `password` as a
+  keyword: `w.save(password="pw", folder=str(folder))`. Passing the
+  password positionally is a common foot-gun and will surface as
+  `StorageError: Invalid wallet name 'pw...'`.
+- The storage layer accepts wallet names matching `[A-Za-z0-9_-]{1,64}`
+  only — characters like `@`, `.`, `/` are rejected.
+- The transactions module keeps a process-global nonce cache
+  (`transactions._nonce_state`). When running multiple probe scripts
+  back-to-back, call `transactions._nonce_state.clear()` and
+  `logger.reset_loggers()` between them.
+
 ## What does NOT need testing in this repo
 
 - This is a library, not a service. There's no dev server to start, no
@@ -149,5 +199,6 @@ and `mw.eth.nonce = N` to control the starting nonce.
 - None for the offline suite.
 - Live e2e (`@pytest.mark.live_e2e`) requires `E2E_PRIVATE_KEY` (and
   optionally `E2E_NETWORK`, `E2E_TOKEN`, `E2E_RECIPIENT`, plus the
-  matching `*_RPC_URL` env var, e.g. `SEPOLIA_RPC_URL`). Treat these as
-  user-scoped secrets and never log their values.
+  matching `*_RPC_URL` env var, e.g. `SEPOLIA_RPC_URL`). To exercise
+  the Alchemy URL path, also set `ALCHEMY_API_KEY`. Treat all of these
+  as user-scoped secrets and never log their values.
